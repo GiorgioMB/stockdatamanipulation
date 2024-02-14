@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='datafetcher',
+    name='stockdatafetcher',
     version='0.1',
     packages=find_packages(),
     description='A comprehensive data retrieval aimed at gathering financial information',
