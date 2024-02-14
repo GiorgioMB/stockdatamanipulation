@@ -11,7 +11,7 @@ class Fetcher:
     """
     def __init__(self, ticker:str, period:str = 'max'):
         self.ticker = ticker
-        self.df, self.actual_ticker = self.get_historical_data(self.ticker)
+        self.df, self.actual_ticker = self.get_historical_data(self.ticker, period)
         
     
     def get_ticker(self, company_name:str)->str:
@@ -36,7 +36,7 @@ class Fetcher:
         else:
             raise AssertionError("Company may not be listed")
 
-    def get_historical_data(self, symbol:str)->tuple[pd.Dataframe, str]:
+    def get_historical_data(self, symbol:str, timeframe:str)->tuple[pd.Dataframe, str]:
         """
         This function returns a PANDAS dataframe about the price of the company and the stock symbol of the company input.
         The company must be listed in the NYSE.
@@ -52,7 +52,7 @@ class Fetcher:
                     if stock_symbol is None:
                         return None
                 stock = yf.Ticker(stock_symbol)
-                historical_data = stock.history(period="max")
+                historical_data = stock.history(period=timeframe)
                 historical_data["Volatility"] = historical_data["Close"].rolling(window=30).std()
                 historical_data = historical_data.dropna()
                 return historical_data, stock_symbol
