@@ -226,12 +226,28 @@ class Transform:
         df['Williams %R'] = -100 * ((df['H14'] - df['Close']) / (df['H14'] - df['L14']))
         return df
     
-    def calculate_fibonacci_retracement(self, df:pd.DataFrame = None, low:int = 0, high:int = 0) -> pd.DataFrame:
+    def calculate_fibonacci_retracement(self, df:pd.DataFrame = None, start_and_end_idxs:tuple=None, fib_1 = None, fib_2 = None, fib_3 = None, fib_4 = None) -> pd.DataFrame:
         if df is None:
             df = self.df
-        df['Low'] = low
-        df['High'] = high
-        df['Retracement'] = (df['Close'] - df['Low']) / (df['High'] - df['Low'])
+        if start_and_end_idxs is None:
+            period_high = df['High'].max()
+            period_low = df['Low'].min()
+        else:
+            start_index, end_index = start_and_end_idxs
+            period_high = df['High'][start_index:end_index].max()
+            period_low = df['Low'][start_index:end_index].min()
+        diff = period_high - period_low
+        if not (fib_1 and fib_2 and fib_3 and fib_4):
+            fib_1 = 0.236
+            fib_2 = 0.382
+            fib_3 = 0.618
+            fib_4 = 0.786
+
+        df['Fib_' + str(fib_1 * 100) + '%'] = period_high - diff * fib_1
+        df['Fib_' + str(fib_2 * 100) + '%'] = period_high - diff * fib_2
+        df['Fib_' + str(fib_3 * 100) + '%'] = period_high - diff * fib_3
+        df['Fib_' + str(fib_4 * 100) + '%'] = period_high - diff * fib_4
+
         return df
     
     def calculate_aroon_oscillator(self, df:pd.DataFrame = None, window:int = 25) -> pd.DataFrame:
@@ -245,20 +261,24 @@ class Transform:
     def calculate_ADX(self, df:pd.DataFrame = None, window:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
-        df['H-L'] = abs(df['High'] - df['Low'])
-        df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
-        df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
-        df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis = 1, skipna = False)
-        df['DMplus'] = np.where((df['High'] - df['High'].shift(1)) > (df['Low'].shift(1) - df['Low']), df['High'] - df['High'].shift(1), 0)
-        df['DMminus'] = np.where((df['Low'].shift(1) - df['Low']) > (df['High'] - df['High'].shift(1)), df['Low'].shift(1) - df['Low'], 0)
-        TRn = df['TR'].rolling(window).mean()
-        DMplusN = df['DMplus'].rolling(window).mean()
-        DMminusN = df['DMminus'].rolling(window).mean()
-        DIplus = 100 * (DMplusN / TRn)
-        DIminus = 100 * (DMminusN / TRn)
-        df['DX'] = 100 * abs((DIplus - DIminus) / (DIplus + DIminus))
-        ADX = df['DX'].rolling(window).mean()
-        df['ADX'] = ADX
+        df['TR'] = np.max([
+            df['High'] - df['Low'], 
+            abs(df['High'] - df['Close'].shift(1)), 
+            abs(df['Low'] - df['Close'].shift(1))
+        ], axis=0)
+        df['+DM'] = np.where((df['High'] - df['High'].shift(1)) > (df['Low'].shift(1) - df['Low']), df['High'] - df['High'].shift(1), 0)
+        df['+DM'] = df['+DM'].where(df['+DM'] > 0, 0)
+        df['-DM'] = np.where((df['Low'].shift(1) - df['Low']) > (df['High'] - df['High'].shift(1)), df['Low'].shift(1) - df['Low'], 0)
+        df['-DM'] = df['-DM'].where(df['-DM'] > 0, 0)
+        df['TR14'] = df['TR'].rolling(window=window).sum()
+        df['+DM14'] = df['+DM'].rolling(window=window).sum()
+        df['-DM14'] = df['-DM'].rolling(window=window).sum()
+        df['+DI14'] = 100 * (df['+DM14'] / df['TR14'])
+        df['-DI14'] = 100 * (df['-DM14'] / df['TR14'])
+        df['DX'] = 100 * abs((df['+DI14'] - df['-DI14']) / (df['+DI14'] + df['-DI14']))
+        df['ADX'] = df['DX'].rolling(window=window).mean()
+        df.drop(['TR', '+DM', '-DM', 'TR14', '+DM14', '-DM14', '+DI14', '-DI14', 'DX'], axis=1, inplace=True)
+
         return df
 
     def calculate_VWAP(self, df:pd.DataFrame = None) -> pd.DataFrame:
@@ -271,15 +291,6 @@ class Transform:
         df['VWAP'] = df['Cumulative Traded'] / df['Cumulative Volume']
         return df        
     
-    def plot_fibonacci_retracement(self, df:pd.DataFrame = None, low:int = 0, high:int = 0):
-        if df is None:
-            df = self.df
-        df = self.calculate_fibonacci_retracement(df, low, high)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['Retracement'], label = 'Retracement')
-        plt.title('Fibonacci Retracement')
-        plt.legend()
-        plt.show()
     
     def plot_stochastic_oscillator(self, df:pd.DataFrame = None, window:int = 14):
         if df is None:
@@ -427,5 +438,5 @@ class Transform:
         plt.title('Returns')
         plt.show()
 
-a = Transform('AAPL').plot_williams_R()
+a = Transform('AAPL').calculate_ADX()
 # %%
