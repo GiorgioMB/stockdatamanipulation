@@ -3,4 +3,4 @@ yfinance>=0.1.63
 requests>=2.25.1
 pylint>=2.6.0
 pandas-datareader>= 0.10.0
-numpy>=1.26.4
+numpy>=1.23
