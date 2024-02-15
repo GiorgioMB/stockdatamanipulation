@@ -1,13 +1,13 @@
 """
-This module contains the DataFetcher class which is designed to retrieve financial information. 
-It uses the yfinance library to gather historical data for specified companies, including data on similar 
-companies based on their sector and beta value. It also provides functionalities to fetch company tickers and 
-historical stock price data, enhancing the ease of financial data analysis.
+This module contains the Fetcher class which is designed to retrieve financial information. 
+It uses the yfinance library to gather historical data for specified companies.
 """
 from requests.exceptions import RequestException
 import yfinance as yf
 import pandas as pd
 import requests
+from typing import Tuple
+
 
 class Fetcher:
     """
@@ -16,7 +16,8 @@ class Fetcher:
     """
     def __init__(self, ticker:str, period:str = 'max'):
         self.ticker = ticker
-        self.df, self.actual_ticker = self.get_historical_data(self.ticker, period)    
+        self.df, self.yf_stock = self.get_historical_data(self.ticker, period)
+        self.income_statement, self.balance_sheet, self.cashflow = self.get_financial_statements(self.yf_stock)    
     def get_ticker(self, company_name:str)->str:
         """
         This function returns the ticker of a company, given the name.
@@ -49,13 +50,65 @@ class Fetcher:
         try:
             stock_symbol = symbol
             stock_symbol = self.get_ticker(stock_symbol)
-            if stock_symbol is None:
+            if not stock_symbol:
                 return None
             stock = yf.Ticker(stock_symbol)
             historical_data = stock.history(period=timeframe)
             historical_data["Volatility"] = historical_data["Close"].rolling(window=30).std()
             historical_data = historical_data.dropna()
-            return historical_data, stock_symbol
+            return historical_data, stock
         except RequestException as e:     
             print(f"Network-related error occurred: {e}")
         return None, None
+    
+    def get_financial_statements(self, stock:yf.Ticker) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Given a yf.Ticker, it returns the three financial statements of the company, if present
+        """
+        try:
+            income_statement = stock.financials
+            balance_sheet = stock.balance_sheet
+            cashflow = stock.cashflow
+            return income_statement, balance_sheet, cashflow
+        except RequestException as e:
+            print(f"Network-related error occurred: {e}")
+            return None, None, None
+    
+    def get_income_statement(self, symbol:str= None):
+        """Returns the income stament
+        if "symbol" is not specified, it returns the income statement of the company the 
+        Fetcher has been initialized to
+        """
+        if not symbol:
+            return self.income_statement
+        else:
+            stock_symbol = symbol
+            stock_symbol = self.get_ticker(stock_symbol)
+            stock = yf.Ticker(stock_symbol)
+            return stock.financials
+    
+    def get_balance_sheet(self, symbol:str= None):
+        """Returns the balance sheet
+        if "symbol" is not specified, it returns the income statement of the company the 
+        Fetcher has been initialized to
+        """
+        if not symbol:
+            return self.balance_sheet
+        else:
+            stock_symbol = symbol
+            stock_symbol = self.get_ticker(stock_symbol)
+            stock = yf.Ticker(stock_symbol)
+            return stock.balance_sheet
+    
+    def get_cashflow(self, symbol:str= None):
+        """Returns the cash flow
+        if "symbol" is not specified, it returns the income statement of the company the 
+        Fetcher has been initialized to
+        """
+        if not symbol:
+            return self.cashflow
+        else:
+            stock_symbol = symbol
+            stock_symbol = self.get_ticker(stock_symbol)
+            stock = yf.Ticker(stock_symbol)
+            return stock.cashflow
