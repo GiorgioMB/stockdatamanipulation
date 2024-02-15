@@ -12,7 +12,9 @@ import requests
 import pandas_datareader.data as web
 from datafetcher import Fetcher
 class Transform:
-    def __init__(self, ticker:str = None, dataframe:pd.DataFrame = None):
+    def __init__(self, 
+                 ticker:str = None, 
+                 dataframe:pd.DataFrame = None):
         if ticker:
             self.fetch = Fetcher(ticker)
             self.df, self.yf_stock = self.fetch.df, self.fetch.yf_stock
@@ -22,7 +24,9 @@ class Transform:
         elif dataframe:
             self.df = dataframe
     
-    def exponential_weights(self, span:int, df:pd.DataFrame = None) -> pd.DataFrame:
+    def exponential_weights(self, 
+                            span:int, 
+                            df:pd.DataFrame = None) -> pd.DataFrame:
         if df is None:
             df = self.df
         weights = np.exp(-np.log(2)*np.arange(len(df))/span)[::-1]
@@ -30,7 +34,8 @@ class Transform:
         df['Close'] = weighted_close
         return df
     
-    def adjust_inflation(self, df:pd.DataFrame = None) -> pd.DataFrame:
+    def adjust_inflation(self, 
+                         df:pd.DataFrame = None) -> pd.DataFrame:
         if df is None:
             df = self.df.copy()
         df.index = df.index.tz_localize(None)
@@ -46,13 +51,16 @@ class Transform:
         df['Refactored'] = df['Close'] * refactor
         return df
 
-    def calculate_returns(self, df:pd.DataFrame = None) -> pd.DataFrame:
+    def calculate_returns(self, 
+                          df:pd.DataFrame = None) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['Return'] = df['Close'].pct_change()
         return df
     
-    def calculate_RSI(self, df:pd.DataFrame = None, period:int = 14) -> pd.DataFrame:
+    def calculate_RSI(self, 
+                      df:pd.DataFrame = None, 
+                      period:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
         delta = df['Close'].diff()
@@ -63,7 +71,10 @@ class Transform:
         df['RSI'] = RSI
         return df
     
-    def calculate_MACD(self, df:pd.DataFrame = None, short_window:int = 12, long_window:int = 26) -> pd.DataFrame:
+    def calculate_MACD(self, 
+                       df:pd.DataFrame = None, 
+                       short_window:int = 12, 
+                       long_window:int = 26) -> pd.DataFrame:
         if df is None:
             df = self.df
         short_ema = df['Close'].ewm(span = short_window, adjust = False).mean()
@@ -72,7 +83,9 @@ class Transform:
         df['Signal'] = df['MACD'].ewm(span = 9, adjust = False).mean()
         return df
     
-    def calculate_bollinger_bands(self, df:pd.DataFrame = None, window:int = 20) -> pd.DataFrame:
+    def calculate_bollinger_bands(self, 
+                                  df:pd.DataFrame = None, 
+                                  window:int = 20) -> pd.DataFrame:
         if df is None:
             df = self.df
         rolling_mean = df['Close'].rolling(window).mean()
@@ -81,49 +94,52 @@ class Transform:
         df['Lower'] = rolling_mean - (rolling_std * 2)
         return df
 
-    def calculate_EMA(self, df:pd.DataFrame = None, window:int = 20) -> pd.DataFrame:
+    def calculate_EMA(self, 
+                      df:pd.DataFrame = None, 
+                      window:int = 20) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['EMA'] = df['Close'].ewm(span = window, adjust = False).mean()
         return df
     
-    def calculate_SMA(self, df:pd.DataFrame = None, window:int = 20) -> pd.DataFrame:
+    def calculate_SMA(self, 
+                      df:pd.DataFrame = None, 
+                      window:int = 20) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['SMA'] = df['Close'].rolling(window).mean()
         return df
     
-    def calculate_KAMA(self, df:pd.DataFrame = None, window:int = 20, fast:int=2, slow: int =30) -> pd.DataFrame:
-    # Step 0: Ensure the DataFrame contains a 'Close' column
+    def calculate_KAMA(self, 
+                       df:pd.DataFrame = None, 
+                       window:int = 20, 
+                       fast:int=2, 
+                       slow: int =30) -> pd.DataFrame:
         if df is None:
             df = self.df
-        # Step 1: Calculate the Efficiency Ratio (ER)
         change = df['Close'].diff(window).abs()
         volatility = df['Close'].diff().abs().rolling(window=window).sum()
         ER = change / volatility
-
-        # Calculate the Smoothing Constant (SC)
         fastSC = 2 / (fast + 1)
         slowSC = 2 / (slow + 1)
         SC = (ER * (fastSC - slowSC) + slowSC) ** 2
-
-        # Initialize KAMA with first value being the same as the first close price
         KAMA = pd.Series(index=df.index, data=np.NaN)
         KAMA.iloc[window] = df['Close'].iloc[window]
-
-        # Calculate KAMA
         for i in range(window + 1, len(df)):
             KAMA.iloc[i] = KAMA.iloc[i - 1] + SC.iloc[i] * (df['Close'].iloc[i] - KAMA.iloc[i - 1])
         df['KAMA'] = KAMA
         return df
     
-    def calculate_on_balance_volume(self, df:pd.DataFrame = None) -> pd.DataFrame:
+    def calculate_on_balance_volume(self, 
+                                    df:pd.DataFrame = None) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['OBV'] = np.where(df['Close'] > df['Close'].shift(1), df['Volume'], np.where(df['Close'] < df['Close'].shift(1), -df['Volume'], 0)).cumsum()
         return df
 
-    def calculate_ATR(self, df:pd.DataFrame = None, window:int = 14) -> pd.DataFrame:
+    def calculate_ATR(self, 
+                      df:pd.DataFrame = None, 
+                      window:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['H-L'] = abs(df['High'] - df['Low'])
@@ -133,7 +149,8 @@ class Transform:
         df['ATR'] = df['TR'].rolling(window).mean()
         return df
     
-    def calculate_ADI(self, df: pd.DataFrame = None) -> pd.DataFrame:
+    def calculate_ADI(self, 
+                      df: pd.DataFrame = None) -> pd.DataFrame:
         if df is None:
             df = self.df
         clv = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) 
@@ -145,18 +162,16 @@ class Transform:
         return df
 
 
-    def calculate_parabolic_sar(self, df, acceleration=0.02, maximum=0.2) -> pd.DataFrame:
+    def calculate_parabolic_sar(self, 
+                                df, 
+                                acceleration=0.02, 
+                                maximum=0.2) -> pd.DataFrame:
         if df is None:
             df = self.df
-        # Initialize columns for SAR, EP (Extreme Point), and AF (Acceleration Factor)
         df['SAR'] = 0.0
         df['EP'] = 0.0
         df['AF'] = acceleration
-
-        # Determine the initial trend
         rising_trend = df['Close'].iloc[1] > df['Close'].iloc[0]
-
-        # Initialize SAR, EP, and the first trend
         if rising_trend:
             df['SAR'].iloc[0] = df['Low'].iloc[0]
             df['EP'].iloc[0] = df['High'].iloc[0]
@@ -165,16 +180,13 @@ class Transform:
             df['EP'].iloc[0] = df['Low'].iloc[0]
 
         for i in range(1, len(df)):
-            # Adjust AF
             if (rising_trend and df['High'].iloc[i] > df['EP'].iloc[i-1]) or (not rising_trend and df['Low'].iloc[i] < df['EP'].iloc[i-1]):
                 df['AF'].iloc[i] = min(df['AF'].iloc[i-1] + acceleration, maximum)
             else:
                 df['AF'].iloc[i] = df['AF'].iloc[i-1]
 
-            # Calculate SAR
             df['SAR'].iloc[i] = df['SAR'].iloc[i-1] + df['AF'].iloc[i-1] * (df['EP'].iloc[i-1] - df['SAR'].iloc[i-1])
 
-            # Check for trend reversal
             if rising_trend:
                 if df['Low'].iloc[i] < df['SAR'].iloc[i]:
                     rising_trend = False
@@ -201,7 +213,9 @@ class Transform:
 
         return df
     
-    def calculate_stochastic_oscillator(self, df:pd.DataFrame = None, window:int = 14) -> pd.DataFrame:
+    def calculate_stochastic_oscillator(self, 
+                                        df:pd.DataFrame = None, 
+                                        window:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['L14'] = df['Low'].rolling(window).min()
@@ -210,13 +224,17 @@ class Transform:
         df['%D'] = df['%K'].rolling(window).mean()
         return df
     
-    def calculate_momentum(self, df:pd.DataFrame = None, window:int = 10) -> pd.DataFrame:
+    def calculate_momentum(self, 
+                           df:pd.DataFrame = None, 
+                           window:int = 10) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['Momentum'] = df['Close'] - df['Close'].shift(window)
         return df
     
-    def calculate_williams_R(self, df:pd.DataFrame = None, window:int = 14) -> pd.DataFrame:
+    def calculate_williams_R(self, 
+                             df:pd.DataFrame = None, 
+                             window:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['H14'] = df['High'].rolling(window).max()
@@ -224,7 +242,13 @@ class Transform:
         df['Williams %R'] = -100 * ((df['H14'] - df['Close']) / (df['H14'] - df['L14']))
         return df
     
-    def calculate_fibonacci_retracement(self, df:pd.DataFrame = None, start_and_end_idxs:tuple=None, fib_1 = None, fib_2 = None, fib_3 = None, fib_4 = None) -> pd.DataFrame:
+    def calculate_fibonacci_retracement(self,
+                                        df:pd.DataFrame = None, 
+                                        start_and_end_idxs:tuple=None, 
+                                        fib_1 = None, 
+                                        fib_2 = None, 
+                                        fib_3 = None, 
+                                        fib_4 = None) -> pd.DataFrame:
         if df is None:
             df = self.df
         if start_and_end_idxs is None:
@@ -248,7 +272,9 @@ class Transform:
 
         return df
     
-    def calculate_aroon_oscillator(self, df:pd.DataFrame = None, window:int = 25) -> pd.DataFrame:
+    def calculate_aroon_oscillator(self, 
+                                   df:pd.DataFrame = None, 
+                                   window:int = 25) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['Up'] = df['High'].rolling(window).apply(lambda x: x.argmax(), raw = True) / window * 100
@@ -256,7 +282,9 @@ class Transform:
         df['Aroon Oscillator'] = df['Up'] - df['Down']
         return df
     
-    def calculate_ADX(self, df:pd.DataFrame = None, window:int = 14) -> pd.DataFrame:
+    def calculate_ADX(self, 
+                      df:pd.DataFrame = None, 
+                      window:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['TR'] = np.max([
@@ -279,7 +307,8 @@ class Transform:
 
         return df
 
-    def calculate_VWAP(self, df:pd.DataFrame = None) -> pd.DataFrame:
+    def calculate_VWAP(self, 
+                       df:pd.DataFrame = None) -> pd.DataFrame:
         if df is None:
             df = self.df
         df['TP'] = (df['High'] + df['Low'] + df['Close']) / 3
@@ -289,7 +318,307 @@ class Transform:
         df['VWAP'] = df['Cumulative Traded'] / df['Cumulative Volume']
         return df        
     
+    def calculate_standard_pivot_points(self, 
+                                        df:pd.DataFrame = None) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
+        df['R1'] = 2 * df['Pivot'] - df['Low']
+        df['S1'] = 2 * df['Pivot'] - df['High']
+        df['R2'] = df['Pivot'] + df['High'] - df['Low']
+        df['S2'] = df['Pivot'] - df['High'] + df['Low']
+        df['R3'] = df['Pivot'] + 2 * (df['High'] - df['Low'])
+        df['S3'] = df['Pivot'] - 2 * (df['High'] - df['Low'])
+        return df
     
+    def calculate_fibonacci_pivot_points(self, 
+                                         df:pd.DataFrame = None, 
+                                         fib1:float = 0.382, 
+                                         fib2:float = 0.618, 
+                                         fib3: float = 1.382) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
+        df['R1'] = df['Pivot'] + fib1 * (df['High'] - df['Low'])
+        df['S1'] = df['Pivot'] - fib1 * (df['High'] - df['Low'])
+        df['R2'] = df['Pivot'] + fib2 * (df['High'] - df['Low'])
+        df['S2'] = df['Pivot'] - fib2 * (df['High'] - df['Low'])
+        df['R3'] = df['Pivot'] + fib3 * (df['High'] - df['Low'])
+        df['S3'] = df['Pivot'] - fib3 * (df['High'] - df['Low'])
+        return df
+    
+    def calculate_woodie_pivot_points(self, 
+                                      df:pd.DataFrame = None) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['Pivot'] = (2 * df['Close'] + df['High'] + df['Low']) / 4        
+        df['R1'] = 2 * df['Pivot'] - df['Low']
+        df['R2'] = df['Pivot'] + (df['High'] - df['Low'])  
+        df['R3'] = df['R1'] + (df['High'] - df['Low']) 
+        df['S1'] = 2 * df['Pivot'] - df['High']
+        df['S2'] = df['Pivot'] - (df['High'] - df['Low'])  
+        df['S3'] = df['S1'] - (df['High'] - df['Low'])  
+        return df
+    
+    def calculate_ichimoku_cloud(self, 
+                                 df:pd.DataFrame = None, 
+                                 conversion_line_window:int = 9, 
+                                 base_line_window:int = 26, 
+                                 lagging_span_window:int = 52, 
+                                 displacement:int = 26) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        period_high = df['High'].rolling(conversion_line_window).max()
+        period_low = df['Low'].rolling(conversion_line_window).min()
+        df['Tenkan-sen'] = (period_high + period_low) / 2
+        period_high = df['High'].rolling(base_line_window).max()
+        period_low = df['Low'].rolling(base_line_window).min()
+        df['Kijun-sen'] = (period_high + period_low) / 2
+        df['Senkou Span A'] = ((df['Tenkan-sen'] + df['Kijun-sen']) / 2).shift(displacement)
+        period_high = df['High'].rolling(lagging_span_window).max()
+        period_low = df['Low'].rolling(lagging_span_window).min()
+        df['Senkou Span B'] = ((period_high + period_low) / 2).shift(displacement)
+        df['Chikou Span'] = df['Close'].shift(-displacement)
+        return df
+    
+    def calculate_chaikin_money_flow(self, 
+                                     df:pd.DataFrame = None, 
+                                     window:int = 20) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['MF Multiplier'] = (2 * df['Close'] - df['Low'] - df['High']) / (df['High'] - df['Low'])
+        df['MF Volume'] = df['MF Multiplier'] * df['Volume']
+        df['CMF'] = df['MF Volume'].rolling(window).sum() / df['Volume'].rolling(window).sum()
+        return df
+    
+    def calculate_force_index(self, 
+                              df:pd.DataFrame = None) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['Force Index'] = df['Close'].diff(1) * df['Volume']
+        return df
+    
+    def calculate_zigzag(self, 
+                         df:pd.DataFrame = None, 
+                         threshold:float = 0.1) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['ZigZag'] = None
+        last_pivot_price = df.iloc[0]['Close']
+        df.loc[0, 'ZigZag'] = last_pivot_price
+        last_pivot_index = 0
+        trend = None 
+        for i in range(1, len(df)):
+            high_change = (df.iloc[i]['High'] - last_pivot_price) / last_pivot_price
+            low_change = (df.iloc[i]['Low'] - last_pivot_price) / last_pivot_price
+            if trend is None or (trend and low_change <= -threshold) or (not trend and high_change >= threshold):
+                if trend is None:
+                    trend = high_change >= threshold
+                elif trend and low_change <= -threshold:
+                    trend = False  
+                elif not trend and high_change >= threshold:
+                    trend = True  
+                pivot_price = df.iloc[i]['High'] if trend else df.iloc[i]['Low']
+                df.loc[last_pivot_index: i, 'ZigZag'] = [last_pivot_price] * (i - last_pivot_index)
+                last_pivot_price = pivot_price
+                last_pivot_index = i
+        df.loc[last_pivot_index:, 'ZigZag'] = [last_pivot_price] * (len(df) - last_pivot_index)
+        return df
+    
+    def calculate_stochastic_momentum_index(self, 
+                                            df:pd.DataFrame = None, 
+                                            n:int = 14, 
+                                            m:int = 3, 
+                                            x:int = 9) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        midpoint = (df['High'] + df['Low']) / 2
+        D = df['Close'] - midpoint
+        D_SMA = D.rolling(window=n).mean()
+        HL = df['High'] - df['Low']
+        HL_SMA = HL.rolling(window=n).mean()
+        D_SMA2 = D_SMA.rolling(window=m).mean()
+        HL_SMA2 = HL_SMA.rolling(window=m).mean()
+        df['SMI'] = (D_SMA2 / (HL_SMA2 / 2)) * 100
+        df['SMI Signal Line'] = df['SMI'].rolling(window=x).mean()
+        return df
+
+    def calculate_keltner_channel(self, 
+                                  df:pd.DataFrame = None, 
+                                  window:int = 20, 
+                                  atr_window:int = 10,
+                                  multiplier:int = 1) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['TR'] = np.max([
+            df['High'] - df['Low'], 
+            abs(df['High'] - df['Close'].shift(1)), 
+            abs(df['Low'] - df['Close'].shift(1))
+        ], axis=0)
+        df['ATR'] = df['TR'].rolling(window=atr_window).mean()
+        df['Upper'] = df['EMA'] + (multiplier * df['ATR'])
+        df['Lower'] = df['EMA'] - (multiplier * df['ATR'])
+        return df
+    
+    def calculate_elder_force_index(self, 
+                                    df:pd.DataFrame = None, 
+                                    window:int = 13) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['Force Index'] = df['Close'].diff(window) * df['Volume']
+        df['EMA'] = df['Force Index'].ewm(span=window, adjust=False).mean()
+        return df
+    
+    def calculate_sd(self, 
+                     df:pd.DataFrame = None, 
+                     window:int = 20) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['SD'] = df['Close'].rolling(window).std()
+        return df
+    
+    def calculate_detrended_price_oscillator(self, 
+                                             df:pd.DataFrame = None, 
+                                             window:int = 20) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['DPO'] = df['Close'] - df['Close'].rolling(window).mean().shift(int(window / 2) + 1)
+        return df
+    
+    def calculate_commodity_channel_index(self, 
+                                          df:pd.DataFrame = None, 
+                                          window:int = 20) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        TP = (df['High'] + df['Low'] + df['Close']) / 3
+        df['CCI'] = (TP - TP.rolling(window).mean()) / (0.015 * TP.rolling(window).std())
+        return df
+    
+    def calculate_CMO(self, 
+                      df:pd.DataFrame = None, 
+                      window:int = 9) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        up = df['Close'].diff().apply(lambda x: x if x > 0 else 0).rolling(window=window).sum()
+        down = df['Close'].diff().apply(lambda x: -x if x < 0 else 0).rolling(window=window).sum()
+        df['CMO'] = 100 * ((up - down) / (up + down))
+        return df
+
+    
+    def calculate_market_facilitation_index(self, 
+                                            df:pd.DataFrame = None) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        df['MFI'] = (df['High'] - df['Low']) / df['Volume']
+        return df
+
+    def calculate_volume_oscillator(self, 
+                                    df: pd.DataFrame, 
+                                    short_window:int = 12, 
+                                    long_window:int = 26) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        fast_vol_ema = df['Volume'].ewm(span=short_window, adjust=False).mean()
+        slow_vol_ema = df['Volume'].ewm(span=long_window, adjust=False).mean()
+        df['Volume Oscillator'] = ((fast_vol_ema - slow_vol_ema) / slow_vol_ema) * 100
+        return df
+
+    
+    def calculate_trix(self, 
+                       df:pd.DataFrame = None, 
+                       window:int = 15) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        single_ema = df['Close'].ewm(span=window, adjust=False).mean()
+        double_ema = single_ema.ewm(span=window, adjust=False).mean()
+        triple_ema = double_ema.ewm(span=window, adjust=False).mean()
+        df['TRIX'] = triple_ema.pct_change() * 100
+        return df
+    
+
+
+    def calculate_know_sure_thing(self, 
+                                  df:pd.DataFrame = None, 
+                                  roc_short:int = 10, 
+                                  roc_long: int = 15, 
+                                  signal_period: int = 9) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        roc1 = df['Close'].diff(roc_short).rolling(roc_short).mean()
+        roc2 = df['Close'].diff(roc_long).rolling(roc_long).mean()
+        roc3 = df['Close'].diff(roc_long * 2).rolling(roc_long * 2).mean()
+        roc4 = df['Close'].diff(roc_long * 3).rolling(roc_long * 3).mean()
+        df['KST'] = roc1 + 2 * roc2 + 3 * roc3 + 4 * roc4
+        df['KST Signal'] = df['KST'].rolling(signal_period).mean()
+        return df
+    
+    def calculate_mass_index(self, 
+                             df:pd.DataFrame = None, 
+                             ema_period:int = 9,
+                             sum_window:int = 25) -> pd.DataFrame:
+        if df is None:
+            df = self.df
+        high_low_range = df['High'] - df['Low']
+        single_ema = high_low_range.ewm(span=ema_period, adjust=False).mean()
+        double_ema = single_ema.ewm(span=ema_period, adjust=False).mean()
+        ema_ratio = single_ema / double_ema
+        df['Mass Index'] = ema_ratio.rolling(window=sum_window).sum()
+        return df
+
+    def calculate_coppock_curve(self,
+                                df:pd.DataFrame = None,
+                                short_window:int = 11,
+                                long_window:int = 14,
+                                signal_period:int = 10) -> pd.DataFrame:
+        
+        def calculate_wma(df, period):
+            weights = np.arange(1, period + 1)
+            return df.rolling(window=period).apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+
+        if df is None:
+            df = self.df
+        roc1 = df['Close'].pct_change(short_window) * 100
+        roc2 = df['Close'].pct_change(long_window) * 100
+        roc_sum = roc1 + roc2
+        df['Coppock Curve'] = calculate_wma(roc_sum, signal_period)
+        return df
+    
+    def calculate_gann_angle_1x1(self,
+                               df:pd.DataFrame = None,
+                               projection_days:int = 30) -> pd.DataFrame:
+        def find_last_pivot(df, lookback=60):
+            max_high = df['High'].iloc[-lookback:].idxmax()
+            min_low = df['Low'].iloc[-lookback:].idxmin()
+            if max_high > min_low:
+                return 'high', max_high, df['High'].loc[max_high]
+            else:
+                return 'low', min_low, df['Low'].loc[min_low]
+        if df is None:
+            df = self.df
+        pivot_type, pivot_index, pivot_value = find_last_pivot(df)
+        df['Gann 1x1'] = np.nan  
+        
+        if pivot_type == 'high':
+            df['Gann 1x1'].iloc[pivot_index:pivot_index+projection_days] = [pivot_value - i for i in range(projection_days)]
+        elif pivot_type == 'low':
+            df['Gann 1x1'].iloc[pivot_index:pivot_index+projection_days] = [pivot_value + i for i in range(projection_days)]    
+        return df
+        
+    def calculate_capm(self, horizon: str = 'month') -> pd.DataFrame:
+        risk_free_rate = self.fetch.get_risk_free_rate(horizon).tail(1)['Close']
+        expected_market_return = self.fetch.get_expected_market_return()['Close']
+        if horizon == 'month':
+            expected_market_return_val = expected_market_return.tail(13 * 7).mean()
+        elif horizon == '5 year':
+            expected_market_return_val = expected_market_return.tail(5 * 252).mean()
+        elif horizon == '10 year':
+            expected_market_return_val = expected_market_return.tail(10 * 252).mean()
+        elif horizon == '30 year':
+            expected_market_return_val = expected_market_return.tail(30 * 252).mean()
+        beta = self.fetch.get_beta_value()
+        capm = risk_free_rate + beta * (expected_market_return_val - risk_free_rate)
+        return capm
+
     def plot_stochastic_oscillator(self, df:pd.DataFrame = None, window:int = 14):
         if df is None:
             df = self.df

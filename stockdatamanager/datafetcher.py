@@ -112,3 +112,28 @@ class Fetcher:
             stock_symbol = self.get_ticker(stock_symbol)
             stock = yf.Ticker(stock_symbol)
             return stock.cashflow
+    
+    def get_beta_value(self) -> float:
+        """Returns the beta value of the stock"""
+        return self.yf_stock.info['beta']
+    
+    def get_alpha_value(self) -> float:
+        """Returns the alpha value of the stock"""
+        return self.yf_stock.info['alpha']
+    
+    def get_risk_free_rate(self, horizon:str = 'month') -> float:
+        """Returns the risk free rate"""
+        if horizon == 'month':
+            return yf.Ticker('^IRX').history(period='max')
+        elif horizon == '5 years':
+            return yf.Ticker('^FVX').history(period='max')
+        elif horizon == '10 years':
+            return yf.Ticker('^TNX').history(period='max')
+        elif horizon == '30 years':
+            return yf.Ticker('^TYX').history(period='max')
+        else:
+            raise ValueError('Invalid horizon, please choose between "month", "5 years", "10 years" and "30 years"')
+
+    def get_sp500(self) -> pd.DataFrame:
+        """Returns the S&P 500"""
+        return yf.Ticker('^GSPC').history(period='max')
