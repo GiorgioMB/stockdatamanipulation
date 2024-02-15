@@ -114,7 +114,6 @@ class Transform:
         # Calculate KAMA
         for i in range(window + 1, len(df)):
             KAMA.iloc[i] = KAMA.iloc[i - 1] + SC.iloc[i] * (df['Close'].iloc[i] - KAMA.iloc[i - 1])
-
         df['KAMA'] = KAMA
         return df
     
@@ -124,7 +123,6 @@ class Transform:
         df['OBV'] = np.where(df['Close'] > df['Close'].shift(1), df['Volume'], np.where(df['Close'] < df['Close'].shift(1), -df['Volume'], 0)).cumsum()
         return df
 
-        
     def calculate_ATR(self, df:pd.DataFrame = None, window:int = 14) -> pd.DataFrame:
         if df is None:
             df = self.df
