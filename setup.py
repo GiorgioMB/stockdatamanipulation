@@ -15,7 +15,7 @@ setup(
         'pandas>=1.1.5',
         'yfinance>=0.1.63',
         'requests>=2.25.1',
-        'pandas-datareader>= 0.10.0'
+        'pandas-datareader>= 0.10.0',
         'numpy>=1.23'
     ],
     python_requires='>=3.6',
