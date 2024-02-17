@@ -4,7 +4,7 @@ This module contains the Transform class which is designed to do multiple manipu
 import pandas as pd
 import numpy as np
 import pandas_datareader.data as web
-from datafetcher import Fetcher
+import Fetcher
 class Transform:
     """
     A utility class for performing various technical analysis calculations on stock market data.
