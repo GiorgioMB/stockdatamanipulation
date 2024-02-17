@@ -1,32 +1,78 @@
-#%%
 """
-This module contains the Transform class which is designed to do multiple manipulation with financial data and statements
+This module contains the Transform class which is designed to do multiple manipulation with financial data
 """
-from requests.exceptions import RequestException
-import yfinance as yf
-import matplotlib.pyplot as plt
-import datetime
 import pandas as pd
 import numpy as np
-import requests
 import pandas_datareader.data as web
 from datafetcher import Fetcher
 class Transform:
+    """
+    A utility class for performing various technical analysis calculations on stock market data.
+    
+    This class supports operations such as calculating moving averages, exponential moving averages,
+    Bollinger Bands, Relative Strength Index (RSI), Moving Average Convergence Divergence (MACD),
+    and many other technical indicators. It can work with data either fetched directly using a ticker symbol
+    or with an externally supplied pandas DataFrame.
+
+    Attributes:
+        ticker (str, optional): The ticker symbol of the stock to fetch data for. If specified, data
+                                will be fetched using the Fetcher class.
+        dataframe (pd.DataFrame, optional): An externally supplied pandas DataFrame containing stock
+                                            market data. Expected to have columns like 'Close', 'High',
+                                            'Low', and 'Volume'.
+        df (pd.DataFrame): The primary DataFrame used for calculations, derived either from the fetched
+                           data using the ticker symbol or directly supplied as an argument.
+        yf_stock (yf.Ticker, optional): The yfinance Ticker object for the specified ticker symbol,
+                                        available if a ticker symbol was provided.
+
+    Methods:
+        This class provides a variety of methods for technical analysis calculations, including:
+        - exponential_weights: Applies exponential weights to the 'Close' column.
+        - adjust_inflation: Adjusts the 'Close' column for inflation using CPI data.
+        - calculate_returns: Calculates the simple returns of the 'Close' column.
+        - calculate_RSI: Calculates the Relative Strength Index.
+        - calculate_MACD: Calculates the Moving Average Convergence Divergence.
+        - calculate_bollinger_bands: Calculates Bollinger Bands.
+        - calculate_EMA: Calculates the Exponential Moving Average.
+        - calculate_SMA: Calculates the Simple Moving Average.
+        - calculate_KAMA: Calculates Kaufman's Adaptive Moving Average.
+        - calculate_on_balance_volume: Calculates On-Balance Volume.
+        - calculate_ATR: Calculates the Average True Range.
+        - calculate_ADI: Calculates the Accumulation/Distribution Index.
+        - (and many more methods for various technical indicators...)
+
+    Usage:
+        To use this class, either provide a ticker symbol to fetch data or supply a pandas DataFrame directly.
+        Once instantiated, call the desired method(s) to perform technical analysis calculations.
+
+    Example:
+        transform = Transform(ticker='AAPL')
+        df_with_rsi = transform.calculate_RSI()
+        df_with_macd = transform.calculate_MACD()
+
+        # Or with an external DataFrame
+        external_df = pd.DataFrame(...)  # Some DataFrame with market data
+        transform = Transform(dataframe=external_df)
+        df_with_bollinger = transform.calculate_bollinger_bands()
+    """
+
     def __init__(self, 
                  ticker:str = None, 
                  dataframe:pd.DataFrame = None):
         if ticker:
             self.fetch = Fetcher(ticker)
             self.df, self.yf_stock = self.fetch.df, self.fetch.yf_stock
-            self.income_statement = self.fetch.income_statement 
-            self.balance_sheet = self.fetch.balance_sheet
-            self.cashflow = self.fetch.cashflow
         elif dataframe:
             self.df = dataframe
     
     def exponential_weights(self, 
                             span:int, 
                             df:pd.DataFrame = None) -> pd.DataFrame:
+        """Modifies the 'Close' column of the dataframe by applying exponential weights to it
+        Inputs:
+        - span: int: The span of the exponential weights
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        """
         if df is None:
             df = self.df
         weights = np.exp(-np.log(2)*np.arange(len(df))/span)[::-1]
@@ -36,6 +82,10 @@ class Transform:
     
     def adjust_inflation(self, 
                          df:pd.DataFrame = None) -> pd.DataFrame:
+        """Adjusts the 'Close' column of the dataframe for inflation
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        """
         if df is None:
             df = self.df.copy()
         df.index = df.index.tz_localize(None)
@@ -53,6 +103,10 @@ class Transform:
 
     def calculate_returns(self, 
                           df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the returns of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        """
         if df is None:
             df = self.df
         df['Return'] = df['Close'].pct_change()
@@ -61,6 +115,10 @@ class Transform:
     def calculate_RSI(self, 
                       df:pd.DataFrame = None, 
                       period:int = 14) -> pd.DataFrame:
+        """Calculates the Relative Strength Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - period: int: The period to be used for the RSI calculation - default is 14"""
         if df is None:
             df = self.df
         delta = df['Close'].diff()
@@ -75,6 +133,12 @@ class Transform:
                        df:pd.DataFrame = None, 
                        short_window:int = 12, 
                        long_window:int = 26) -> pd.DataFrame:
+        """Calculates the Moving Average Convergence Divergence of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - short_window: int: The period to be used for the short EMA - default is 12
+        - long_window: int: The period to be used for the long EMA - default is 26
+        """
         if df is None:
             df = self.df
         short_ema = df['Close'].ewm(span = short_window, adjust = False).mean()
@@ -86,6 +150,10 @@ class Transform:
     def calculate_bollinger_bands(self, 
                                   df:pd.DataFrame = None, 
                                   window:int = 20) -> pd.DataFrame:
+        """Calculates the Bollinger Bands of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Bollinger Bands calculation - default is 20"""
         if df is None:
             df = self.df
         rolling_mean = df['Close'].rolling(window).mean()
@@ -97,6 +165,10 @@ class Transform:
     def calculate_EMA(self, 
                       df:pd.DataFrame = None, 
                       window:int = 20) -> pd.DataFrame:
+        """Calculates the Exponential Moving Average of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the EMA calculation - default is 20"""
         if df is None:
             df = self.df
         df['EMA'] = df['Close'].ewm(span = window, adjust = False).mean()
@@ -105,6 +177,10 @@ class Transform:
     def calculate_SMA(self, 
                       df:pd.DataFrame = None, 
                       window:int = 20) -> pd.DataFrame:
+        """Calculates the Simple Moving Average of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the SMA calculation - default is 20"""
         if df is None:
             df = self.df
         df['SMA'] = df['Close'].rolling(window).mean()
@@ -115,6 +191,12 @@ class Transform:
                        window:int = 20, 
                        fast:int=2, 
                        slow: int =30) -> pd.DataFrame:
+        """Calculates the Kaufman's Adaptive Moving Average of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the KAMA calculation - default is 20
+        - fast: int: The period to be used for the fast smoothing constant - default is 2
+        - slow: int: The period to be used for the slow smoothing constant - default is 30"""
         if df is None:
             df = self.df
         change = df['Close'].diff(window).abs()
@@ -132,6 +214,9 @@ class Transform:
     
     def calculate_on_balance_volume(self, 
                                     df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the On Balance Volume of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' and 'Volume' column - if None, the class dataframe is used"""
         if df is None:
             df = self.df
         df['OBV'] = np.where(df['Close'] > df['Close'].shift(1), df['Volume'], np.where(df['Close'] < df['Close'].shift(1), -df['Volume'], 0)).cumsum()
@@ -140,6 +225,10 @@ class Transform:
     def calculate_ATR(self, 
                       df:pd.DataFrame = None, 
                       window:int = 14) -> pd.DataFrame:
+        """Calculates the Average True Range of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - window: int: The period to be used for the ATR calculation - default is 14"""
         if df is None:
             df = self.df
         df['H-L'] = abs(df['High'] - df['Low'])
@@ -151,6 +240,9 @@ class Transform:
     
     def calculate_ADI(self, 
                       df: pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the Accumulation/Distribution Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High', 'Low' and 'Volume' column - if None, the class dataframe is used"""
         if df is None:
             df = self.df
         clv = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) 
@@ -164,8 +256,13 @@ class Transform:
 
     def calculate_parabolic_sar(self, 
                                 df, 
-                                acceleration=0.02, 
-                                maximum=0.2) -> pd.DataFrame:
+                                acceleration: float =0.02, 
+                                maximum: float = 0.2) -> pd.DataFrame:
+        """Calculates the Parabolic SAR of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - acceleration: float: The acceleration factor to be used for the Parabolic SAR calculation - default is 0.02
+        - maximum: float: The maximum acceleration factor to be used for the Parabolic SAR calculation - default is 0.2"""
         if df is None:
             df = self.df
         df['SAR'] = 0.0
@@ -216,17 +313,28 @@ class Transform:
     def calculate_stochastic_oscillator(self, 
                                         df:pd.DataFrame = None, 
                                         window:int = 14) -> pd.DataFrame:
+        """Calculates the Stochastic Oscillator of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Stochastic Oscillator calculation - default is 14"""
         if df is None:
             df = self.df
-        df['L14'] = df['Low'].rolling(window).min()
-        df['H14'] = df['High'].rolling(window).max()
-        df['%K'] = 100 * ((df['Close'] - df['L14']) / (df['H14'] - df['L14']))
+        low_str = 'L'+str(window)
+        high_str = 'H'+str(window)
+        df[low_str] = df['Low'].rolling(window).min()
+        df[high_str] = df['High'].rolling(window).max()
+        df['%K'] = 100 * ((df['Close'] - df[low_str]) / (df[high_str] - df[low_str]))
         df['%D'] = df['%K'].rolling(window).mean()
         return df
     
     def calculate_momentum(self, 
                            df:pd.DataFrame = None, 
                            window:int = 10) -> pd.DataFrame:
+        """Calculates the Momentum of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Momentum calculation - default is 10
+        """
         if df is None:
             df = self.df
         df['Momentum'] = df['Close'] - df['Close'].shift(window)
@@ -235,20 +343,32 @@ class Transform:
     def calculate_williams_R(self, 
                              df:pd.DataFrame = None, 
                              window:int = 14) -> pd.DataFrame:
+        """Calculates the Williams %R of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Williams %R calculation - default is 14"""
         if df is None:
             df = self.df
-        df['H14'] = df['High'].rolling(window).max()
-        df['L14'] = df['Low'].rolling(window).min()
-        df['Williams %R'] = -100 * ((df['H14'] - df['Close']) / (df['H14'] - df['L14']))
+        df['H'+ str(window)] = df['High'].rolling(window).max()
+        df['L' + str(window)] = df['Low'].rolling(window).min()
+        df['Williams %R'] = -100 * ((df['H'+ str(window)] - df['Close']) / (df['H'+ str(window)] - df['L' + str(window)]))
         return df
     
     def calculate_fibonacci_retracement(self,
                                         df:pd.DataFrame = None, 
                                         start_and_end_idxs:tuple=None, 
-                                        fib_1 = None, 
-                                        fib_2 = None, 
-                                        fib_3 = None, 
-                                        fib_4 = None) -> pd.DataFrame:
+                                        fib_1: float = 0.236, 
+                                        fib_2: float = 0.382, 
+                                        fib_3: float = 0.618, 
+                                        fib_4: float = 0.786) -> pd.DataFrame:
+        """Calculates the Fibonacci Retracement of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - start_and_end_idxs: tuple: The start and end indexes to be used for the calculation - if None, the whole dataframe is used
+        - fib_1: float: The first fibonacci level - default is 0.236
+        - fib_2: float: The second fibonacci level - default is 0.382
+        - fib_3: float: The third fibonacci level - default is 0.618
+        - fib_4: float: The fourth fibonacci level - default is 0.786"""
         if df is None:
             df = self.df
         if start_and_end_idxs is None:
@@ -259,11 +379,6 @@ class Transform:
             period_high = df['High'][start_index:end_index].max()
             period_low = df['Low'][start_index:end_index].min()
         diff = period_high - period_low
-        if not (fib_1 and fib_2 and fib_3 and fib_4):
-            fib_1 = 0.236
-            fib_2 = 0.382
-            fib_3 = 0.618
-            fib_4 = 0.786
 
         df['Fib_' + str(fib_1 * 100) + '%'] = period_high - diff * fib_1
         df['Fib_' + str(fib_2 * 100) + '%'] = period_high - diff * fib_2
@@ -275,6 +390,10 @@ class Transform:
     def calculate_aroon_oscillator(self, 
                                    df:pd.DataFrame = None, 
                                    window:int = 25) -> pd.DataFrame:
+        """Calculates the Aroon Oscillator of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Aroon Oscillator calculation - default is 25"""
         if df is None:
             df = self.df
         df['Up'] = df['High'].rolling(window).apply(lambda x: x.argmax(), raw = True) / window * 100
@@ -285,6 +404,10 @@ class Transform:
     def calculate_ADX(self, 
                       df:pd.DataFrame = None, 
                       window:int = 14) -> pd.DataFrame:
+        """Calculates the Average Directional Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - window: int: The period to be used for the ADX calculation - default is 14"""
         if df is None:
             df = self.df
         df['TR'] = np.max([
@@ -309,6 +432,10 @@ class Transform:
 
     def calculate_VWAP(self, 
                        df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the Volume Weighted Average Price of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs a 'Close', 'High', 'Low' and 'Volume' column - if None, the class dataframe is used
+        """
         if df is None:
             df = self.df
         df['TP'] = (df['High'] + df['Low'] + df['Close']) / 3
@@ -320,6 +447,9 @@ class Transform:
     
     def calculate_standard_pivot_points(self, 
                                         df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the Standard Pivot Points of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs 'High', 'Low' and 'Close' columns - if None, the class dataframe is used"""
         if df is None:
             df = self.df
         df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
@@ -336,6 +466,13 @@ class Transform:
                                          fib1:float = 0.382, 
                                          fib2:float = 0.618, 
                                          fib3: float = 1.382) -> pd.DataFrame:
+        """Calculates the Fibonacci Pivot Points of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'High', 'Low' and 'Close' columns - if None, the class dataframe is used
+        - fib1: float: The first fibonacci level - default is 0.382
+        - fib2: float: The second fibonacci level - default is 0.618
+        - fib3: float: The third fibonacci level - default is 1.382
+        """
         if df is None:
             df = self.df
         df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
@@ -349,6 +486,10 @@ class Transform:
     
     def calculate_woodie_pivot_points(self, 
                                       df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the Woodie Pivot Points of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'High', 'Low' and 'Close' columns - if None, the class dataframe is used
+        """
         if df is None:
             df = self.df
         df['Pivot'] = (2 * df['Close'] + df['High'] + df['Low']) / 4        
@@ -366,6 +507,14 @@ class Transform:
                                  base_line_window:int = 26, 
                                  lagging_span_window:int = 52, 
                                  displacement:int = 26) -> pd.DataFrame:
+        """Calculates the Ichimoku Cloud of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'High', 'Low' and 'Close' columns - if None, the class dataframe is used
+        - conversion_line_window: int: The period to be used for the conversion line calculation - default is 9
+        - base_line_window: int: The period to be used for the base line calculation - default is 26
+        - lagging_span_window: int: The period to be used for the lagging span calculation - default is 52
+        - displacement: int: The displacement to be used for the lagging span calculation - default is 26
+        """
         if df is None:
             df = self.df
         period_high = df['High'].rolling(conversion_line_window).max()
@@ -384,6 +533,11 @@ class Transform:
     def calculate_chaikin_money_flow(self, 
                                      df:pd.DataFrame = None, 
                                      window:int = 20) -> pd.DataFrame:
+        """Calculates the Chaikin Money Flow of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'High', 'Low', 'Close' and 'Volume' columns - if None, the class dataframe is used
+        - window: int: The period to be used for the Chaikin Money Flow calculation - default is 20
+        """
         if df is None:
             df = self.df
         df['MF Multiplier'] = (2 * df['Close'] - df['Low'] - df['High']) / (df['High'] - df['Low'])
@@ -393,6 +547,10 @@ class Transform:
     
     def calculate_force_index(self, 
                               df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the Force Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' and 'Volume' columns - if None, the class dataframe is used
+        """
         if df is None:
             df = self.df
         df['Force Index'] = df['Close'].diff(1) * df['Volume']
@@ -401,6 +559,11 @@ class Transform:
     def calculate_zigzag(self, 
                          df:pd.DataFrame = None, 
                          threshold:float = 0.1) -> pd.DataFrame:
+        """Calculates the ZigZag of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - threshold: float: The threshold to be used for the ZigZag calculation - default is 0.1
+        """
         if df is None:
             df = self.df
         df['ZigZag'] = None
@@ -430,6 +593,13 @@ class Transform:
                                             n:int = 14, 
                                             m:int = 3, 
                                             x:int = 9) -> pd.DataFrame:
+        """Calculates the Stochastic Momentum Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' columns - if None, the class dataframe is used
+        - n: int: The period to be used for the first EMA calculation - default is 14
+        - m: int: The period to be used for the second EMA calculation - default is 3
+        - x: int: The period to be used for the Signal Line calculation - default is 9
+        """
         if df is None:
             df = self.df
         midpoint = (df['High'] + df['Low']) / 2
@@ -448,6 +618,13 @@ class Transform:
                                   window:int = 20, 
                                   atr_window:int = 10,
                                   multiplier:int = 1) -> pd.DataFrame:
+        """Calculates the Keltner Channel of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' columns - if None, the class dataframe is used
+        - window: int: The period to be used for the EMA calculation - default is 20
+        - atr_window: int: The period to be used for the ATR calculation - default is 10
+        - multiplier: int: The multiplier to be used for the Keltner Channel calculation - default is 1
+        """
         if df is None:
             df = self.df
         df['TR'] = np.max([
@@ -463,6 +640,12 @@ class Transform:
     def calculate_elder_force_index(self, 
                                     df:pd.DataFrame = None, 
                                     window:int = 13) -> pd.DataFrame:
+        """Calculates the Elder Force Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' and 'Volume' columns - if None, the class dataframe is used
+        - window: int: The period to be used for the Elder Force Index calculation - default is 13
+        """
+
         if df is None:
             df = self.df
         df['Force Index'] = df['Close'].diff(window) * df['Volume']
@@ -472,6 +655,11 @@ class Transform:
     def calculate_sd(self, 
                      df:pd.DataFrame = None, 
                      window:int = 20) -> pd.DataFrame:
+        """Calculates the Standard Deviation of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Standard Deviation calculation - default is 20
+        """
         if df is None:
             df = self.df
         df['SD'] = df['Close'].rolling(window).std()
@@ -480,6 +668,11 @@ class Transform:
     def calculate_detrended_price_oscillator(self, 
                                              df:pd.DataFrame = None, 
                                              window:int = 20) -> pd.DataFrame:
+        """Calculates the Detrended Price Oscillator of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Detrended Price Oscillator calculation - default is 20
+        """
         if df is None:
             df = self.df
         df['DPO'] = df['Close'] - df['Close'].rolling(window).mean().shift(int(window / 2) + 1)
@@ -488,6 +681,12 @@ class Transform:
     def calculate_commodity_channel_index(self, 
                                           df:pd.DataFrame = None, 
                                           window:int = 20) -> pd.DataFrame:
+        """Calculates the Commodity Channel Index of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' columns - if None, the class dataframe is used
+        - window: int: The period to be used for the Commodity Channel Index calculation - default is 20
+        """
+
         if df is None:
             df = self.df
         TP = (df['High'] + df['Low'] + df['Close']) / 3
@@ -497,6 +696,12 @@ class Transform:
     def calculate_CMO(self, 
                       df:pd.DataFrame = None, 
                       window:int = 9) -> pd.DataFrame:
+        """Calculates the Chande Momentum Oscillator of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the Chande Momentum Oscillator calculation - default is 9
+        """
+
         if df is None:
             df = self.df
         up = df['Close'].diff().apply(lambda x: x if x > 0 else 0).rolling(window=window).sum()
@@ -507,6 +712,11 @@ class Transform:
     
     def calculate_market_facilitation_index(self, 
                                             df:pd.DataFrame = None) -> pd.DataFrame:
+        """Calculates the Market Facilitation Index of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'High' and 'Low' columns - if None, the class dataframe is used
+        """
+
         if df is None:
             df = self.df
         df['MFI'] = (df['High'] - df['Low']) / df['Volume']
@@ -516,6 +726,12 @@ class Transform:
                                     df: pd.DataFrame, 
                                     short_window:int = 12, 
                                     long_window:int = 26) -> pd.DataFrame:
+        """Calculates the Volume Oscillator of the 'Volume' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Volume' column - if None, the class dataframe is used
+        - short_window: int: The period to be used for the short EMA calculation - default is 12
+        - long_window: int: The period to be used for the long EMA calculation - default is 26
+        """
         if df is None:
             df = self.df
         fast_vol_ema = df['Volume'].ewm(span=short_window, adjust=False).mean()
@@ -527,6 +743,11 @@ class Transform:
     def calculate_trix(self, 
                        df:pd.DataFrame = None, 
                        window:int = 15) -> pd.DataFrame:
+        """Calculates the TRIX of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' column - if None, the class dataframe is used
+        - window: int: The period to be used for the TRIX calculation - default is 15
+        """
         if df is None:
             df = self.df
         single_ema = df['Close'].ewm(span=window, adjust=False).mean()
@@ -542,6 +763,13 @@ class Transform:
                                   roc_short:int = 10, 
                                   roc_long: int = 15, 
                                   signal_period: int = 9) -> pd.DataFrame:
+        """Calculates the Know Sure Thing of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' column - if None, the class dataframe is used
+        - roc_short: int: The period to be used for the short Rate of Change calculation - default is 10
+        - roc_long: int: The period to be used for the long Rate of Change calculation - default is 15
+        - signal_period: int: The period to be used for the Signal Line calculation - default is 9
+        """
         if df is None:
             df = self.df
         roc1 = df['Close'].diff(roc_short).rolling(roc_short).mean()
@@ -556,6 +784,12 @@ class Transform:
                              df:pd.DataFrame = None, 
                              ema_period:int = 9,
                              sum_window:int = 25) -> pd.DataFrame:
+        """Calculates the Mass Index of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'High' and 'Low' columns - if None, the class dataframe is used
+        - ema_period: int: The period to be used for the EMA calculation - default is 9
+        - sum_window: int: The period to be used for the Sum calculation - default is 25
+        """
         if df is None:
             df = self.df
         high_low_range = df['High'] - df['Low']
@@ -570,6 +804,13 @@ class Transform:
                                 short_window:int = 11,
                                 long_window:int = 14,
                                 signal_period:int = 10) -> pd.DataFrame:
+        """Calculates the Coppock Curve of the 'Close' column of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close' column - if None, the class dataframe is used
+        - short_window: int: The period to be used for the short Rate of Change calculation - default is 11
+        - long_window: int: The period to be used for the long Rate of Change calculation - default is 14
+        - signal_period: int: The period to be used for the Signal Line calculation - default is 10
+        """
         
         def calculate_wma(df, period):
             weights = np.arange(1, period + 1)
@@ -586,6 +827,11 @@ class Transform:
     def calculate_gann_angle_1x1(self,
                                df:pd.DataFrame = None,
                                projection_days:int = 30) -> pd.DataFrame:
+        """Calculates the Gann 1x1 of the dataframe
+        Inputs:
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - projection_days: int: The number of days to be used for the projection - default is 30
+        """
         def find_last_pivot(df, lookback=60):
             max_high = df['High'].iloc[-lookback:].idxmax()
             min_low = df['Low'].iloc[-lookback:].idxmin()
@@ -605,6 +851,10 @@ class Transform:
         return df
         
     def calculate_capm(self, horizon: str = 'month') -> pd.DataFrame:
+        """Calculates the Capital Asset Pricing Model of the stock using the risk free rate and the expected market return
+        Inputs:
+        - horizon: str: The horizon to be used for the calculation - default is 'month'
+        """
         risk_free_rate = self.fetch.get_risk_free_rate(horizon).tail(1)['Close']
         expected_market_return = self.fetch.get_expected_market_return()['Close']
         if horizon == 'month':
@@ -618,152 +868,3 @@ class Transform:
         beta = self.fetch.get_beta_value()
         capm = risk_free_rate + beta * (expected_market_return_val - risk_free_rate)
         return capm
-
-    def plot_stochastic_oscillator(self, df:pd.DataFrame = None, window:int = 14):
-        if df is None:
-            df = self.df
-        df = self.calculate_stochastic_oscillator(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['%D'], label = '%D')
-        plt.title('Stochastic Oscillator')
-        plt.legend()
-        plt.show()
-
-    def plot_momentum(self, df:pd.DataFrame = None, window:int = 10):
-        if df is None:
-            df = self.df
-        df = self.calculate_momentum(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['Momentum'], label = 'Momentum')
-        plt.title('Momentum')
-        plt.legend()
-        plt.show()
-
-    def plot_williams_R(self, df:pd.DataFrame = None, window:int = 14):
-        if df is None:
-            df = self.df
-        df = self.calculate_williams_R(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['Williams %R'], label = 'Williams %R')
-        plt.title('Williams %R')
-        plt.legend()
-        plt.show()
-
-    def plot_parabolic_sar(self, df:pd.DataFrame = None, acceleration = 0.02, maximum = 0.2):
-        if df is None:
-            df = self.df
-        df = self.calculate_parabolic_sar(df, acceleration, maximum)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['SAR'], label = 'SAR')
-        plt.title('Parabolic SAR')
-        plt.legend()
-        plt.show()     
-
-    def plot_inflation_adjustment(self, df:pd.DataFrame = None):
-        if df is None:
-            df = self.df
-        df = self.adjust_inflation(df)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['Close'], label = 'Inflation Adjusted Close')
-        plt.title('Inflation Adjustment')
-        plt.legend()
-        plt.show()   
-    
-    def plot_ADI(self, df:pd.DataFrame = None):
-        if df is None:
-            df = self.df
-        df = self.calculate_ADI(df)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['ADI'], label = 'ADI')
-        plt.title('ADI')
-        plt.legend()
-        plt.show()
-
-    def plot_EMA(self, df:pd.DataFrame = None, window:int = 20):
-        if df is None:
-            df = self.df
-        df = self.calculate_EMA(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['EMA'], label = 'EMA')
-        plt.title('EMA')
-        plt.legend()
-        plt.show()
-    
-    def plot_SMA(self, df:pd.DataFrame = None, window:int = 20):
-        if df is None:
-            df = self.df
-        df = self.calculate_SMA(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['SMA'], label = 'SMA')
-        plt.title('SMA')
-        plt.legend()
-        plt.show()
-    
-    def plot_ATR(self, df:pd.DataFrame = None, window:int = 14):
-        if df is None:
-            df = self.df
-        df = self.calculate_ATR(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['ATR'], label = 'ATR')
-        plt.title('ATR')
-        plt.legend()
-        plt.show()
-    
-    def plot_KAMA(self, df:pd.DataFrame = None, window:int = 20):
-        if df is None:
-            df = self.df
-        df = self.calculate_KAMA(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['KAMA'], label = 'KAMA')
-        plt.title('KAMA')
-        plt.legend()
-        plt.show()
-
-    def plot_bollinger_bands(self, df:pd.DataFrame = None, window:int = 20):
-        if df is None:
-            df = self.df
-        df = self.calculate_bollinger_bands(df, window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['Close'], label = 'Close')
-        plt.plot(df['Upper'], label = 'Upper')
-        plt.plot(df['Lower'], label = 'Lower')
-        plt.title('Bollinger Bands')
-        plt.legend()
-        plt.show()
-
-    def plot_RSI(self, df:pd.DataFrame = None, period:int = 14):
-        if df is None:
-            df = self.df
-        df = self.calculate_RSI(df, period)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['RSI'], label = 'RSI')
-        plt.title('RSI')
-        plt.axhline(0, linestyle='--', alpha=0.1)
-        plt.axhline(20, linestyle='--', alpha=0.5)
-        plt.axhline(30, linestyle='--')
-        plt.axhline(70, linestyle='--')
-        plt.axhline(80, linestyle='--', alpha=0.5)
-        plt.axhline(100, linestyle='--', alpha=0.1)
-        plt.show()
-    
-    def plot_MACD(self, df:pd.DataFrame = None, short_window:int = 12, long_window:int = 26):
-        if df is None:
-            df = self.df
-        df = self.calculate_MACD(df, short_window, long_window)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['MACD'], label = 'MACD')
-        plt.title('MACD')
-        plt.legend()
-        plt.show()
-    
-    def plot_returns(self, df:pd.DataFrame = None):
-        if df is None:
-            df = self.df
-        df = self.calculate_returns(df)
-        plt.figure(figsize=(12,6))
-        plt.plot(df['Return'], label = 'Return')
-        plt.title('Returns')
-        plt.show()
-
-a = Transform('AAPL').calculate_ADX()
-# %%
