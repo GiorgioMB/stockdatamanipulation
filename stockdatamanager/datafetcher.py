@@ -1,4 +1,3 @@
-#%%
 """
 This module contains the Fetcher class which is designed to retrieve financial information. 
 It uses the yfinance library to gather historical data for specified companies.
@@ -301,4 +300,3 @@ class Fetcher:
     def get_sp500(self) -> pd.DataFrame:
         """Returns the S&P 500"""
         return yf.Ticker('^GSPC').history(period='max')
-# %%
