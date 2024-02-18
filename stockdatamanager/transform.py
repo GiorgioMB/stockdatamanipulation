@@ -856,15 +856,19 @@ class Transform:
         - horizon: str: The horizon to be used for the calculation - default is 'month'
         """
         risk_free_rate = self.fetch.get_risk_free_rate(horizon).tail(1)['Close']
-        expected_market_return = self.fetch.get_expected_market_return()['Close']
+        expected_market_return = self.fetch.get_sp500()['Close'].astype(float)
+        market_log_returns = np.log(expected_market_return / expected_market_returns.shift(1))
         if horizon == 'month':
-            expected_market_return_val = expected_market_return.tail(13 * 7).mean()
+            period_returns = market_log_returns.tail(13 * 7)
         elif horizon == '5 year':
-            expected_market_return_val = expected_market_return.tail(5 * 252).mean()
+            period_returns = market_log_returns.tail(5 * 252)
         elif horizon == '10 year':
-            expected_market_return_val = expected_market_return.tail(10 * 252).mean()
+            period_returns = market_log_returns.tail(10 * 252)
         elif horizon == '30 year':
-            expected_market_return_val = expected_market_return.tail(30 * 252).mean()
+            period_returns = market_log_returns.tail(30 * 252)
+        else:
+            raise ValueError("Invalid horizon provided.")
+        expected_market_return_val = np.exp(period_returns.mean() * 252) - 1
         beta = self.fetch.get_beta_value()
         capm = risk_free_rate + beta * (expected_market_return_val - risk_free_rate)
         return capm
