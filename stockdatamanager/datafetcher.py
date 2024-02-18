@@ -40,10 +40,13 @@ class Fetcher:
     Note:
     This class requires an internet connection to fetch data from Yahoo Finance.
     """
-    def __init__(self, ticker:str, period:str = 'max'):
-        self.ticker = ticker
-        self.df, self.yf_stock = self.get_historical_data(self.ticker, period)
-        self.income_statement, self.balance_sheet, self.cashflow = self.get_financial_statements(self.yf_stock)    
+    def __init__(self, ticker:str = None, period:str = 'max'):
+        if ticker:
+            self.ticker = ticker
+            self.df, self.yf_stock = self.get_historical_data(self.ticker, period)
+            self.income_statement, self.balance_sheet, self.cashflow = self.get_financial_statements(self.yf_stock)
+        else:
+            print("Warning, no ticker has been specified. Only get_ticker(), get_risk_free_rate() and get_sp500() methods will work.")    
     def get_ticker(self, company_name:str)->str:
         """
         This function returns the ticker of a company, given the name.
@@ -278,15 +281,15 @@ class Fetcher:
         return self.yf_stock.info['marketCap'] / revenue
 
 
-    def get_risk_free_rate(self, horizon:str = 'month') -> float:
+    def get_risk_free_rate(self, horizon:str = '13 weeks') -> float:
         """Returns the risk free rate, given an horizon.
         Accepted inputs are:
-            -month
+            -13 weeks
             -5 years
             -10 years
             -30 years
         """
-        if horizon == 'month':
+        if horizon == '13 weeks':
             return yf.Ticker('^IRX').history(period='max')
         elif horizon == '5 years':
             return yf.Ticker('^FVX').history(period='max')
