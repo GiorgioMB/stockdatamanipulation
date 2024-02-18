@@ -4,6 +4,7 @@ This module contains the Transform class which is designed to do multiple manipu
 import pandas as pd
 import numpy as np
 import pandas_datareader.data as web
+import scipy as sp
 from .datafetcher import Fetcher
 class Transform:
     """
@@ -59,11 +60,13 @@ class Transform:
     def __init__(self, 
                  ticker:str = None, 
                  dataframe:pd.DataFrame = None):
-        if ticker:
+        if ticker is not None:
             self.fetch = Fetcher(ticker)
             self.df, self.yf_stock = self.fetch.df, self.fetch.yf_stock
-        elif dataframe:
+        elif dataframe is not None:
             self.df = dataframe
+        else:
+            print("Warning: No data provided, dataframe will need to be supplied for each method call")
     
     def exponential_weights(self, 
                             span:int, 
@@ -850,25 +853,34 @@ class Transform:
             df['Gann 1x1'].iloc[pivot_index:pivot_index+projection_days] = [pivot_value + i for i in range(projection_days)]    
         return df
         
-    def calculate_capm(self, horizon: str = 'month') -> pd.DataFrame:
+    def calculate_capm(self, horizon: str = '13 weeks') -> pd.DataFrame:
         """Calculates the Capital Asset Pricing Model of the stock using the risk free rate and the expected market return
         Inputs:
-        - horizon: str: The horizon to be used for the calculation - default is 'month'
+        - horizon: str: The horizon to be used for the calculation - default is '13 weeks' 
+            -Accepted inputs:
+                -'13 weeks',
+                -'5 years', 
+                -'10 years' 
+                -'30 years' 
         """
-        risk_free_rate = self.fetch.get_risk_free_rate(horizon).tail(1)['Close']
-        expected_market_return = self.fetch.get_sp500()['Close'].astype(float)
-        market_log_returns = np.log(expected_market_return / expected_market_returns.shift(1))
-        if horizon == 'month':
-            period_returns = market_log_returns.tail(13 * 7)
-        elif horizon == '5 year':
-            period_returns = market_log_returns.tail(5 * 252)
-        elif horizon == '10 year':
-            period_returns = market_log_returns.tail(10 * 252)
-        elif horizon == '30 year':
-            period_returns = market_log_returns.tail(30 * 252)
-        else:
-            raise ValueError("Invalid horizon provided.")
-        expected_market_return_val = np.exp(period_returns.mean() * 252) - 1
+        risk_free_rate = self.fetch.get_risk_free_rate(horizon).tail(1)['Close'].values[0] / 100  
         beta = self.fetch.get_beta_value()
-        capm = risk_free_rate + beta * (expected_market_return_val - risk_free_rate)
+        if horizon == '13 weeks':
+            annual_factor = 252 / (13 * 5)
+        else: annual_factor = 1
+        sp500 = self.fetch.get_sp500()
+        if horizon == '13 weeks':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(252)
+        elif horizon == '5 years':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(5 * 252)
+        elif horizon == '10 years':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(10 * 252)
+        elif horizon == '30 years':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(30 * 252)
+        mean_daily_return = daily_returns.mean()
+        if horizon == '13 weeks':
+            expected_returns = ((1 + mean_daily_return) ** (252 / annual_factor)) - 1
+        else:
+            expected_returns = ((1 + mean_daily_return) ** (252 * annual_factor)) - 1
+        capm = risk_free_rate + beta * (expected_returns - risk_free_rate)
         return capm
