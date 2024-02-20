@@ -303,3 +303,15 @@ class Fetcher:
     def get_sp500(self) -> pd.DataFrame:
         """Returns the S&P 500"""
         return yf.Ticker('^GSPC').history(period='max')
+    
+    def get_dividend_yield(self) -> float:
+        """Returns the dividend yield"""
+        return self.yf_stock.info['dividendYield']
+    
+    def get_payout_ratio(self) -> float:
+        """Returns the payout ratio"""
+        return self.yf_stock.info['payoutRatio']
+
+    def get_earnings_growth_rate(self) -> float:
+        """Returns the growth rate"""
+        return self.yf_stock.info['earningsQuarterlyGrowth']
