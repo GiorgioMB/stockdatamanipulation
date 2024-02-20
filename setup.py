@@ -5,7 +5,7 @@ setup(
     name='stockdatamanager',
     version='0.6',
     packages=find_packages(),
-    description='A comprehensive data retrieval aimed at gathering financial information',
+    description='A comprehensive library for financial analysis',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     author='Giorgio Micaletto',
