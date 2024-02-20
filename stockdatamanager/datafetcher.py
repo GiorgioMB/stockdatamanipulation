@@ -315,3 +315,4 @@ class Fetcher:
     def get_earnings_growth_rate(self) -> float:
         """Returns the growth rate"""
         return self.yf_stock.info['earningsQuarterlyGrowth']
+    
