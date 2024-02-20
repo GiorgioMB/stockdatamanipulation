@@ -1,6 +1,7 @@
 """
 This module contains the Transform class which is designed to do multiple manipulation with financial data
 """
+from cv2 import mean
 import pandas as pd
 import numpy as np
 import pandas_datareader.data as web
@@ -853,7 +854,32 @@ class Transform:
             df['Gann 1x1'].iloc[pivot_index:pivot_index+projection_days] = [pivot_value + i for i in range(projection_days)]    
         return df
         
-    def calculate_capm(self, horizon: str = '13 weeks') -> pd.DataFrame:
+    def calculate_market_return(self, horizon: str = '13 weeks') -> float:
+        """
+        Calculates the expected market return for a given horizon.
+        Accepted inputs:
+        -'13 weeks',
+        -'5 years',
+        -'10 years',
+        -'30 years'"""
+        sp500 = self.fetch.get_sp500()
+        if horizon == '13 weeks':
+            annual_factor = 252 / (13 * 5)
+        else: annual_factor = 1
+        if horizon == '13 weeks':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(252)
+        elif horizon == '5 years':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(5 * 252)
+        elif horizon == '10 years':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(10 * 252)
+        elif horizon == '30 years':
+            daily_returns = self.calculate_returns(sp500)['Return'].tail(30 * 252)
+        mean_daily_return = daily_returns.mean()
+        retval = ((1 + mean_daily_return) ** (252 * annual_factor)) - 1 if horizon != '13 weeks' else ((1 + mean_daily_return) ** (252 / annual_factor)) - 1
+        return retval
+
+
+    def calculate_capm(self, horizon: str = '13 weeks') -> float:
         """Calculates the Capital Asset Pricing Model of the stock using the risk free rate and the expected market return
         Inputs:
         - horizon: str: The horizon to be used for the calculation - default is '13 weeks' 
@@ -865,22 +891,7 @@ class Transform:
         """
         risk_free_rate = self.fetch.get_risk_free_rate(horizon).tail(1)['Close'].values[0] / 100  
         beta = self.fetch.get_beta_value()
-        if horizon == '13 weeks':
-            annual_factor = 252 / (13 * 5)
-        else: annual_factor = 1
-        sp500 = self.fetch.get_sp500()
-        if horizon == '13 weeks':
-            daily_returns = self.calculate_returns(sp500)['Return'].tail(252)
-        elif horizon == '5 years':
-            daily_returns = self.calculate_returns(sp500)['Return'].tail(5 * 252)
-        elif horizon == '10 years':
-            daily_returns = self.calculate_returns(sp500)['Return'].tail(10 * 252)
-        elif horizon == '30 years':
-            daily_returns = self.calculate_returns(sp500)['Return'].tail(30 * 252)
-        mean_daily_return = daily_returns.mean()
-        if horizon == '13 weeks':
-            expected_returns = ((1 + mean_daily_return) ** (252 / annual_factor)) - 1
-        else:
-            expected_returns = ((1 + mean_daily_return) ** (252 * annual_factor)) - 1
+        expected_returns = self.calculate_market_return(horizon)
         capm = risk_free_rate + beta * (expected_returns - risk_free_rate)
         return capm
+    
