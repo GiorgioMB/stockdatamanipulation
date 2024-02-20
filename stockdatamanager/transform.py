@@ -1,11 +1,9 @@
 """
 This module contains the Transform class which is designed to do multiple manipulation with financial data
 """
-from cv2 import mean
 import pandas as pd
 import numpy as np
 import pandas_datareader.data as web
-import scipy as sp
 from .datafetcher import Fetcher
 class Transform:
     """
@@ -894,4 +892,3 @@ class Transform:
         expected_returns = self.calculate_market_return(horizon)
         capm = risk_free_rate + beta * (expected_returns - risk_free_rate)
         return capm
-    
