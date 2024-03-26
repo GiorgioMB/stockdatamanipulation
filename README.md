@@ -1,7 +1,7 @@
 # StockDataManager
 This Python library offers a combination of technical analysis tools and fundamental data retrieval functionalities, designed to support investors, researchers, and enthusiasts in the financial markets. Utilizing the yfinance library, it provides easy access to historical stock data, financial statements, and key financial metrics from Yahoo Finance, alongside a suite of technical indicators for market analysis.
 ## Features
-- **Technical Analysis (`Transform` Class)**: Over 30 technical indicators, including Moving Averages, MACD, Bollinger Bands, RSI, Ichimoku Cloud, and more, to dissect stock market trends and volatility.
+- **Technical Analysis (`IndicatorCalculator` Class)**: Over 30 technical indicators, including Moving Averages, MACD, Bollinger Bands, RSI, Ichimoku Cloud, and more, to dissect stock market trends and volatility.
 - **Fundamental Analysis (`Fetcher` Class)**: Fetch historical stock data, income statements, balance sheets, cash flows, and key financial ratios (e.g., P/E, ROE, current ratio) for in-depth fundamental analysis.
 
 ## Installation
@@ -18,8 +18,8 @@ fetcher = Fetcher(ticker='AAPL')
 print(fetcher.get_pe_ratio())
 
 # Apply technical analysis on fetched data
-transform = Transform(dataframe=fetcher.df)
-df_with_rsi = transform.calculate_RSI()
+indicators = IndicatorCalculator(dataframe=fetcher.df)
+df_with_rsi = indicators.calculate_RSI()
 ```
 ## Usage
 ### Fetching Data
