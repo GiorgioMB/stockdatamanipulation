@@ -1,3 +1,5 @@
+class QuantIndicators:
+  pass
 ## Greeks
 ## Yield curve/convexity bonds
 ## Futures pricing
