@@ -11,7 +11,7 @@ pip install stockdatamanager
 ```
 ## Quick Start
 ```python
-from stockdatamanager import Fetcher, Transform
+from stockdatamanager import Fetcher, IndicatorCalculator
 
 # Fetch historical data and financial statements for analysis
 fetcher = Fetcher(ticker='AAPL')
