@@ -60,18 +60,18 @@ class IndicatorCalculator:
 
     def __init__(self, 
                  ticker:str = None, 
-                 dataframe:pd.DataFrame = None
+                 dataframe:pd.DataFrame = None,
                  verbose: int = 0):
         if ticker is not None:
             self.fetch = Fetcher(ticker)
             self.df, self.yf_stock = self.fetch.df, self.fetch.yf_stock
         elif dataframe is not None:
             self.df = dataframe
+        else:
+            print("Warning: No data provided, dataframe will need to be supplied for each method call")
         if verbose < 0 or verbose > 2 or type(verbose) != int:
             raise ValueError("Invalid verbosity level. Must be an integer between 0 and 2.")
         self.verb = verbose
-        else:
-            print("Warning: No data provided, dataframe will need to be supplied for each method call")
     
     def exponential_weights(self, 
                             span:int, 
@@ -310,7 +310,7 @@ class IndicatorCalculator:
 
 
     def calculate_parabolic_sar(self, 
-                                df, 
+                                df: pd.DataFrame = None, 
                                 acceleration: float =0.02, 
                                 maximum: float = 0.2) -> pd.DataFrame:
         """Calculates the Parabolic SAR of the 'Close' column of the dataframe
@@ -664,23 +664,22 @@ class IndicatorCalculator:
             print("Force Index calculated")
         return df
     
-    def calculate_zigzag(self, 
-                         df:pd.DataFrame = None, 
-                         threshold:float = 0.1) -> pd.DataFrame:
+    def calculate_zigzag(self, df: pd.DataFrame = None, threshold: float = 0.1) -> pd.DataFrame:
         """Calculates the ZigZag of the 'Close' column of the dataframe
         Inputs:
-        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' column - if None, the class dataframe is used
+        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High', and 'Low' column - if None, the class dataframe is used
         - threshold: float: The threshold to be used for the ZigZag calculation - default is 0.1
         """
-        if self.verb == 2:
+        if hasattr(self, 'verb') and self.verb == 2:
             print(f"Calculating ZigZag with threshold: {threshold}")
         if df is None:
             df = self.df
         df['ZigZag'] = None
         last_pivot_price = df.iloc[0]['Close']
-        df.loc[0, 'ZigZag'] = last_pivot_price
+        df.at[df.index[0], 'ZigZag'] = last_pivot_price
         last_pivot_index = 0
-        trend = None 
+        trend = None
+        
         for i in range(1, len(df)):
             high_change = (df.iloc[i]['High'] - last_pivot_price) / last_pivot_price
             low_change = (df.iloc[i]['Low'] - last_pivot_price) / last_pivot_price
@@ -688,15 +687,16 @@ class IndicatorCalculator:
                 if trend is None:
                     trend = high_change >= threshold
                 elif trend and low_change <= -threshold:
-                    trend = False  
+                    trend = False
                 elif not trend and high_change >= threshold:
-                    trend = True  
+                    trend = True
                 pivot_price = df.iloc[i]['High'] if trend else df.iloc[i]['Low']
-                df.loc[last_pivot_index: i, 'ZigZag'] = [last_pivot_price] * (i - last_pivot_index)
+                df.loc[df.index[last_pivot_index]: df.index[i], 'ZigZag'] = last_pivot_price
                 last_pivot_price = pivot_price
                 last_pivot_index = i
-        df.loc[last_pivot_index:, 'ZigZag'] = [last_pivot_price] * (len(df) - last_pivot_index)
-        if self.verb > 0:
+        df.loc[df.index[last_pivot_index]:, 'ZigZag'] = last_pivot_price
+        
+        if hasattr(self, 'verb') and self.verb > 0:
             print("ZigZag calculated")
         return df
     
@@ -863,7 +863,7 @@ class IndicatorCalculator:
         return df
 
     def calculate_volume_oscillator(self, 
-                                    df: pd.DataFrame, 
+                                    df: pd.DataFrame = None, 
                                     short_window:int = 12, 
                                     long_window:int = 26) -> pd.DataFrame:
         """Calculates the Volume Oscillator of the 'Volume' column of the dataframe
@@ -985,39 +985,6 @@ class IndicatorCalculator:
             print("Coppock Curve calculated")
         return df
     
-    def calculate_gann_angle_1x1(self,
-                               df:pd.DataFrame = None,
-                               projection_days:int = 30) -> pd.DataFrame:
-        """Calculates the Gann 1x1 of the dataframe
-        Inputs:
-        - df: pd.DataFrame: The dataframe to be used - needs to have 'Close', 'High' and 'Low' column - if None, the class dataframe is used
-        - projection_days: int: The number of days to be used for the projection - default is 30
-        """
-        if self.verb == 2:
-            print(f"Calculating Gann 1x1 with projection days: {projection_days}")
-        def find_last_pivot(df, lookback=60):
-            max_high = df['High'].iloc[-lookback:].idxmax()
-            min_low = df['Low'].iloc[-lookback:].idxmin()
-            if max_high > min_low:
-                if self.verb == 2:
-                    print("Last pivot calculated as high")
-                return 'high', max_high, df['High'].loc[max_high]
-            else:
-                if self.verb == 2:
-                    print("Last pivot calculated as low")
-                return 'low', min_low, df['Low'].loc[min_low]
-        if df is None:
-            df = self.df
-        pivot_type, pivot_index, pivot_value = find_last_pivot(df)
-        df['Gann 1x1'] = np.nan  
-        if pivot_type == 'high':
-            df['Gann 1x1'].iloc[pivot_index:pivot_index+projection_days] = [pivot_value - i for i in range(projection_days)]
-        elif pivot_type == 'low':
-            df['Gann 1x1'].iloc[pivot_index:pivot_index+projection_days] = [pivot_value + i for i in range(projection_days)]    
-        if self.verb > 0:
-            print("Gann 1x1 calculated")
-        return df
-    
     def calculate_all(self, df: pd.DataFrame = None):
         """
         Calculates all the technical indicators in the class.
@@ -1027,14 +994,14 @@ class IndicatorCalculator:
         if df is None:
             df = self.df
         counter = 0
-        for method in dir(self):
-            if method.startswith('calculate_') and method != 'calculate_all':
-                counter += 1
-                if self.verb == 2:
-                    print(f"Calculating method {counter} out of {len(dir(self)) - 3}")
-                func = getattr(self, method)()
-                new_df = func(df)
-                for col in new_df.columns:
-                    if col not in df.columns:
-                        df[col] = new_df[col]
+        methods_to_call = [method for method in dir(self) if method.startswith('calculate_') and method != 'calculate_all']
+        for method in methods_to_call:
+            counter += 1
+            if self.verb == 2:
+                print(f"Calculating method {counter} out of {len(methods_to_call)}")
+            func = getattr(self, method)
+            new_df = func()
+            for col in new_df.columns:
+                if col not in df.columns:
+                    df[col] = new_df[col]
         return df
