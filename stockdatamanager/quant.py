@@ -71,7 +71,7 @@ class Greeks:
       K = option['strike']
       ##convert self.date to days until expiration
       T = (self.date - pd.to_datetime('today')).days / 365
-      r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+      r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
       sigma = option['impliedVolatility']
       d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
       delta = norm.cdf(d1)
@@ -80,7 +80,7 @@ class Greeks:
       S = dataframe['Close'].iloc[-1]
       K = option['strike']
       T = (self.date - pd.to_datetime('today')).days / 365
-      r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+      r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
       sigma = option['impliedVolatility']
       d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
       delta = norm.cdf(d1) - 1
@@ -100,7 +100,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     gamma = norm.pdf(d1) / (S * sigma * np.sqrt(T))
@@ -120,7 +120,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     vega = S * norm.pdf(d1) * np.sqrt(T)
@@ -140,7 +140,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     vanna = -norm.pdf(d1) * d1 / sigma
@@ -160,7 +160,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     dividends = self.fetcher.get_dividend_yield()
     r_adj = r - dividends
@@ -188,7 +188,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -212,7 +212,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -233,7 +233,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -254,7 +254,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -275,7 +275,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -296,7 +296,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -317,7 +317,7 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]
     K = option['strike']
     T = (self.date - pd.to_datetime('today')).days / 365
-    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)
+    r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
@@ -380,33 +380,38 @@ class OptionPricing:
     date = pd.to_datetime(date_str)
     return date  
   
-  def pricing_formula(self, risk_free_rate: Union[str, float] = '13 weeks', use_black_scholes: bool = True, **kwargs):
+  def pricing_formula(self, price_of_underlying_asset:float = None, risk_free_rate: Union[str, float] = '13 weeks', use_black_scholes: bool = True, **kwargs):
         """
         Calculate the price of an option using user-defined pricing components passed as keyword arguments.
         Inputs:
+        - price_of_underlying_asset: float, the price of the underlying asset. If None, the last price in the dataframe will be used.
         - risk_free_rate: Union[str, float], the risk free rate to use in the calculations, either a string representing the horizon or a float.
         - use_black_scholes: bool, whether to use the Black-Scholes formula to calculate the price of the option.
         - **kwargs: dict, the keyword arguments containing the custom pricing components. Note: they will not be used if use_black_scholes is True.
+    
 
-        Each keyword argument should be a function that only accept as argument the risk free rate, a float. They will not be validated, so make sure they are correctly implemented.
+        Each keyword argument should be a function that only accept as argument the price of the underlying asset and the risk free rate, a float. They will not be validated, so make sure they are correctly implemented.
         Each function will be simply summed, so each transformation should be done within the function itself.
 
         Example:
-        def my_custom_pricing_component(r):
-            return - np.log(r * 0.5)
+        def my_custom_pricing_component(S, r):
+          return S * (-np.log(r * 0.5))
         
         option = OptionPricing('AAPL', True, 'AAPL220121C00100000')
-        option.pricing_formula(risk_free_rate = 0.12, custom_pricing_component = my_custom_pricing_component)
+        option.pricing_formula(price_of_underlying_asset = 100, risk_free_rate = 0.12, custom_pricing_component = my_custom_pricing_component)
         """
+        if price_of_underlying_asset is None:
+          S = self.df['Close'].iloc[-1]
+        else:
+          S = price_of_underlying_asset
         if self.verbose:
             print("Calculating option price")
         price_components = []
         if type(risk_free_rate) == str:
-          r = self.fetcher.get_risk_free_rate(risk_free_rate)
+          r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
         else:
           r = risk_free_rate
         if use_black_scholes:
-          S = self.df['Close'].iloc[-1]
           K = self.option['strike']
           T = (self.date - pd.to_datetime('today')).days / 365
           sigma = self.option['impliedVolatility']
@@ -438,22 +443,24 @@ class OptionPricing:
         transition_matrix[i, j] += 1
     transition_matrix /= transition_matrix.sum(axis = 1)[:, None]
     return transition_matrix
+  
   def simulate_price_paths(self, start_price, days_to_expiration, transition_matrix, num_simulations = 1000):
     state_space = np.arange(len(transition_matrix))        
-        price_paths = np.zeros((num_simulations, days_to_expiration))
-        for sim in range(num_simulations):
-            current_state = np.searchsorted(state_space, start_price)
-            price_path = [start_price]
-            for _ in range(1, days_to_expiration):
-                current_state = np.random.choice(state_space, p=transition_matrix[current_state])
-                price_path.append(state_space[current_state])
-            price_paths[sim] = price_path
-        return price_paths
+    price_paths = np.zeros((num_simulations, days_to_expiration))
+    for sim in range(num_simulations):
+      current_state = np.searchsorted(state_space, start_price)
+      price_path = [start_price]
+      for _ in range(1, days_to_expiration):
+        current_state = np.random.choice(state_space, p=transition_matrix[current_state])
+        price_path.append(state_space[current_state])
+      price_paths[sim] = price_path
+    return price_paths
 
-  def calculate_markov_chain(self, plot = False, num_simulations = 1000, transition_matrix = None,  num_states = 20, **kwargs) -> float:
+  def calculate_markov_chain(self, r: float = None, plot: bool = False, num_simulations: int = 1000, transition_matrix: np.ndarray = None,  num_states: int = 20, **kwargs) -> float:
     """
     Calculate the expected value of an option using a Markov chain model. 
     Inputs:
+    - r: float, the risk free rate to use in the calculations. If None, it will be automatically calculated.
     - plot: bool, whether to plot the simulated price paths.
     - num_simulations: int, the number of simulations to run.
     - transition_matrix: np.ndarray, the transition matrix to use in the simulations. If None, it will be calculated as a discretized version of the daily returns.
@@ -462,6 +469,10 @@ class OptionPricing:
 
     
     """
+    if r is None:
+      r = self.fetcher.get_risk_free_rate('13 weeks')['Close'].iloc[-1]
+    else:
+      r = r
     days_to_expiration = (self.date - pd.to_datetime('today')).days
     if transition_matrix is None:
       transition_matrix = self.calculate_transition_matrix(num_states)
@@ -475,5 +486,16 @@ class OptionPricing:
         plt.xlabel('Days to expiration')
         plt.ylabel('Price')
         plt.show()
-    option_values = [self.pricing_formula(path[-1], **kwargs) for path in price_paths]    
+    option_values = [self.pricing_formula(price_of_underlying_asset = path[-1], risk_free_rate = r, **kwargs) for path in price_paths]    
     return np.mean(option_values)
+    
+
+
+
+
+
+## Yield curve/convexity bonds
+## Futures pricing
+## Commodities pricing
+## CDS pricing
+## credit spread of a company with risk free rate
