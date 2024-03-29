@@ -29,7 +29,7 @@ income_statement = fetcher.get_income_statement()
 ```
 ### Calculating Technical Indicators
 ```python
-transform = Transform(dataframe=fetcher.df)
+transform = Transform(ticker='AAPL')
 df_with_macd = transform.calculate_MACD()
 ```
 ## Contributions
