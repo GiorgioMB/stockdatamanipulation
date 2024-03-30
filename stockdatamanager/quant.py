@@ -8,7 +8,8 @@ from scipy.stats import norm
 import matplotlib.pyplot as plt
 import seaborn as sns
 import arch
-import optuna 
+import optuna
+from stockdatamanager.customerror import MethodError
 
 class Greeks:
   """
