@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import arch
 import optuna
-from stockdatamanager.customerror import MethodError
+from stockdatamanager.customerrors import MethodError
 
 class Greeks:
   """
