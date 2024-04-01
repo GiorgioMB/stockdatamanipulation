@@ -50,6 +50,7 @@ Calculate the Delta of an option:
 greeks = Greeks(ticker='AAPL', call=True, identification='AAPL220121C00100000')
 print(greeks.calculate_delta())
 ```
+Simulate option pricing using a Markov chain model:
 ```python
 option_pricing = OptionPricing(ticker='AAPL', call=True, identification='AAPL220121C00100000')
 print(option_pricing.calculate_option_value_with_markov_chain())
