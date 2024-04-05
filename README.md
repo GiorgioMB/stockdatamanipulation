@@ -6,7 +6,7 @@ This Python library provides a comprehensive suite of tools for both technical a
 ## Features
 - **Technical Analysis (`IndicatorCalculator` Class)**: Over 30 technical indicators, including Moving Averages, MACD, Bollinger Bands, RSI, Ichimoku Cloud, and more, to dissect stock market trends and volatility.
 - **Fundamental Analysis (`Fetcher` Class)**: Fetch historical stock data, income statements, balance sheets, cash flows, and key financial ratios (e.g., P/E, ROE, current ratio) for in-depth fundamental analysis.
-- **Options Analysis** (`Greeks` and `OptionPricing` Classes): Calculate options greeks and simulate option prices using advanced models. Supports both European and American options.
+- **Options Analysis** (`Greeks` and `OptionPricing` Classes): Calculate options greeks and simulate option prices using various models. Supports both European and American options.
 
 ## Installation
 
