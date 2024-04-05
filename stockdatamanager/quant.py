@@ -435,7 +435,7 @@ class OptionPricing:
         else:
           for _, func in kwargs.items():
               try:
-                price_component = func(r)
+                price_component = func(S, r)
                 price_components.append(price_component)
               except Exception as e:
                 print(f"Failed to calculate {func} due to error: {e}")
