@@ -1,3 +1,12 @@
+"""
+This file contains classes and methods for option pricing and analysis, utilizing various financial models and numerical methods. 
+It allows for calculations of option Greeks and prices either using tree methods (binomial, trinomial) or finite difference methods (explicit, implicit, Crank-Nicolson) among others. 
+It supports both European and American options for price calculation.
+Classes:
+- Greeks: Calculate option Greeks (Delta, Gamma, Vega, etc.) using the Black-Scholes formula.
+- OptionPricing: Main class for option pricing that utilizes different numerical methods and models including GARCH for volatility modeling.
+The design favors flexibility in choosing pricing methods and models, offering tools for both simple and advanced option pricing scenarios.
+"""
 from stockdatamanager.customerrors import MethodError
 from .datafetcher import Fetcher
 import pandas as pd
