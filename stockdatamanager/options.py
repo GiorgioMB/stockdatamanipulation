@@ -527,7 +527,7 @@ class _FDCN(_FiniteDifferences):
 class _FDCNUS(_FDCN):
   """Internal class to implement the Crank-Nicolson Finite Difference Method for american option pricing"""
   def __init__(self, S, K, r, T, sigma, Smax, M, N, omega, tol, call):
-    super(FDCnAm, self).__init__(S, K, r=r, T=T, sigma=sigma, Smax=Smax, M=M, N=N, call=call)
+    super(_FDCNUS, self).__init__(S, K, r=r, T=T, sigma=sigma, Smax=Smax, M=M, N=N, call=call)
     self.omega = omega
     self.tol = tol
     self.i_values = np.arange(self.M+1)
@@ -579,8 +579,97 @@ class _FDCNUS(_FDCN):
 
   def interpolate(self):
     """ Use piecewise linear interpolation on the initial grid column to get the closest price at S."""
-    return np.interp(self.S0, self.boundary_conds, self.values)
+    return np.interp(self.S, self.boundary_conds, self.values)
 
+class _BinomialCRRLattice(Option):
+  def setup_parameters(self):
+    self.u = math.exp(self.sigma * math.sqrt(self.dt))
+    self.d = 1 / self.u
+    self.qu = (math.exp((self.r - self.div)*self.dt) - self.d) / (self.u-self.d)
+    self.qd = 1 - self.qu
+    self.M = 2 * self.N + 1
+
+  def init_stock_price_tree(self):
+    self.STs = np.zeros(self.M)
+    self.STs[0] = self.S * self.u ** self.N
+    for i in range(self.M)[1:]:
+      self.STs[i] = self.STs[i-1]*self.d
+  
+  def init_payoffs_tree(self):
+    odd_nodes = self.STs[::2]  
+    if self.is_call:
+        return np.maximum(0, odd_nodes-self.K)
+    else:
+        return np.maximum(0, self.K-odd_nodes)
+    
+  def check_early_exercise(self, payoffs, node):
+    self.STs = self.STs[1:-1] 
+    odd_STs = self.STs[::2]
+    if self.is_call:
+        return np.maximum(payoffs, odd_STs-self.K)
+    else:
+        return np.maximum(payoffs, self.K-odd_STs)
+  def traverse_tree(self, payoffs):
+    for i in reversed(range(self.N)):
+        payoffs = (payoffs[:-1]*self.qu + 
+                   payoffs[1:]*self.qd)*self.df
+        if not self.is_european:
+            payoffs = self.check_early_exercise(payoffs,i)
+    return payoffs
+  
+  def begin_tree_traversal(self):
+    payoffs = self.init_payoffs_tree()
+    return self.traverse_tree(payoffs)
+  
+  def price(self):
+    self.setup_parameters()
+    self.init_stock_price_tree()
+    payoffs = self.begin_tree_traversal()
+    return payoffs[0]
+
+class _TrinomialLattice(Option):
+  def setup_parameters(self):
+    """ Required calculations for the model """
+    self.u = math.exp(self.sigma * math.sqrt(2 * self.dt))
+    self.d = 1/self.u
+    self.m = 1
+    self.qu = ((math.exp((self.r-self.div) * self.dt/2) - math.exp(-self.sigma * math.sqrt(self.dt / 2))) / (math.exp(self.sigma * math.sqrt(self.dt / 2)) - math.exp(-self.sigma * math.sqrt(self.dt / 2)))) ** 2
+    self.qd = ((math.exp(self.sigma * math.sqrt(self.dt/2)) - math.exp((self.r - self.div) * self.dt / 2)) / (math.exp(self.sigma * math.sqrt(self.dt / 2)) - math.exp(-self.sigma * math.sqrt(self.dt / 2)))) ** 2
+    self.qm = 1 - self.qu - self.qd
+    self.M = 2 * self.N + 1
+  def init_stock_price_tree(self):
+      self.STs = np.zeros(self.M)
+      self.STs[0] = self.S0 * self.u**self.N
+      for i in range(self.M)[1:]:
+          self.STs[i] = self.STs[i-1]*self.d
+  def init_payoffs_tree(self):
+      if self.is_call:
+          return np.maximum(0, self.STs-self.K)
+      else:
+          return np.maximum(0, self.K-self.STs)
+  def check_early_exercise(self, payoffs, node):
+      self.STs = self.STs[1:-1]  
+      if self.is_call:
+          return np.maximum(payoffs, self.STs-self.K)
+      else:
+          return np.maximum(payoffs, self.K-self.STs)
+  def traverse_tree(self, payoffs):
+      for i in reversed(range(self.N)):
+          payoffs = (payoffs[:-2] * self.qu +
+                     payoffs[1:-1] * self.qm +
+                     payoffs[2:] * self.qd) * self.df
+          if not self.is_european:
+              payoffs = self.check_early_exercise(payoffs,i)
+      return payoffs
+  def begin_tree_traversal(self):
+      payoffs = self.init_payoffs_tree()
+      return self.traverse_tree(payoffs)
+  def price(self):
+      """  The pricing implementation """
+      self.setup_parameters()
+      self.init_stock_price_tree()
+      payoffs = self.begin_tree_traversal()
+      return payoffs[0]
 
 class OptionPricing(object):
   def __init__(self, 
@@ -676,6 +765,20 @@ class OptionPricing(object):
       else:
         price = self.binom_european(N, pd_, pu)
       return price
+    if method == 'binomiallatice' or 'binomial_lattice' or 'binomlattice' or 'binom_lattice':
+      if 'N' not in kwargs:
+        print("N not passed, using default value of 1000")
+      if 'pd_' not in kwargs:
+        print("pd_ not passed, using default value of 0")
+      if 'pu' not in kwargs:
+        print("pu not passed, using default value of 0")
+      if describe:
+        print("The Binomial Lattice Method requires three optional values,")
+        print("N, which is the number of time steps")
+        print("pd_, which is the probability at the down state")
+        print("pu, which is the probability at the up state")
+      price = self.binomial_lattice(N, pd_, pu)
+      return price
     if method == 'cox-ross-rubinstein' or 'coxrossrubinstein' or 'crr':
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
@@ -726,6 +829,20 @@ class OptionPricing(object):
         price = self.trinom_american(N, pd_, pu)
       else:
         price = self.trinom_european(N, pd_, pu)
+      return price
+    if method == 'trinomiallattice' or 'trinomial_lattice' or 'trinomlattice' or 'trinom_lattice':
+      if 'N' not in kwargs:
+        print("N not passed, using default value of 1000")
+      if 'pd_' not in kwargs:
+        print("pd_ not passed, using default value of 0")
+      if 'pu' not in kwargs:
+        print("pu not passed, using default value of 0")
+      if describe:
+        print("The Trinomial Lattice Method requires three optional values,")
+        print("N, which is the number of time steps")
+        print("pd_, which is the probability at the down state")
+        print("pu, which is the probability at the up state")
+      price = self.trinomial_lattice(N, pd_, pu)
       return price
     if method == 'finitedifference' or 'finite_difference':
       raise MethodError("Please specify between Explicit Finite Difference, Implicit Finite Difference and Crank-Nicolson Finite Difference")
@@ -814,6 +931,34 @@ class OptionPricing(object):
   def explicit_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float: 
     eu = _FDEU(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
     return eu.price() 
+
+  def trinom_lattice(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
+    option = _TrinomialLattice(self.S,
+                    self.K,
+                    self.risk_free_rate,
+                    self.T,
+                    N,
+                    pu,
+                    pd_,
+                    self.dividend_yield,
+                    self.sigma,
+                    self.is_call,
+                    self.american)
+    return option.price()
+
+  def binom_lattice(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
+    option = _BinomialCRRLattice(self.S,
+                    self.K,
+                    self.risk_free_rate,
+                    self.T,
+                    N,
+                    pu,
+                    pd_,
+                    self.dividend_yield,
+                    self.sigma,
+                    self.is_call,
+                    self.american)
+    return option.price()
 
   def trinom_american(self, N: int = 100, pd_: float = 0, pu: float = 0) -> float:
     Option = Option(self.S,
