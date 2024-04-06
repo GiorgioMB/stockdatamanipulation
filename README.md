@@ -15,7 +15,8 @@ pip install stockdatamanager
 ```
 ## Quick Start
 ```python
-from stockdatamanager import Fetcher, IndicatorCalculator, Greeks, OptionPricing
+from stockdatamanager import Fetcher, IndicatorCalculator
+from stockdatamanager.options import Greeks, OptionPricing
 
 # Fetching stock data and financial statements
 fetcher = Fetcher(ticker='AAPL')
@@ -29,9 +30,10 @@ df_with_rsi = indicators.calculate_RSI()
 greeks = Greeks(ticker = 'AAPL', call = True, identification = 0)
 delta = greeks.calculate_delta()
 
-# Simulating option prices
-option_pricing = OptionPricing(ticker = 'Microsoft', call = False, identification= 0)
-option_price = option_pricing.calculate_american_style_option_prices(method = 'binomial')
+# Pricing an American-style option using the binomial tree method
+option_pricing = OptionPricing(ticker='MSFT', call=False, american=True, risk_free_rate='13 weeks', identification=0, use_yfinance_volatility=True)
+option_price = option_pricing.calculate_option_price(method='binomial', describe=False)
+print(f"Option Price: {option_price}")
 ```
 ## Usage
 ### Fetching Data
@@ -50,10 +52,11 @@ Calculate the Delta of an option:
 greeks = Greeks(ticker='AAPL', call=True, identification='AAPL220121C00100000')
 print(greeks.calculate_delta())
 ```
-Simulate option pricing using a Markov chain model:
+Simulate option pricing using the Crank-Nicholson method:
 ```python
-option_pricing = OptionPricing(ticker='AAPL', call=True, identification='AAPL220121C00100000')
-print(option_pricing.calculate_option_value_with_markov_chain())
+option_pricing = OptionPricing(ticker='MSFT', call=False, american=True, risk_free_rate='13 weeks', identification='AAPL220121C00100000', use_yfinance_volatility=True)
+option_price = option_pricing.calculate_option_price(method='crank-nicolson', describe=False)
+print(f"Crank-Nicolson Method Option Price: {option_price}")
 ```
 ## Contributions
 Contributions are welcome! Feel free to open an issue or submit a pull request for improvements or new features.
