@@ -6,14 +6,15 @@ import yfinance as yf
 import re
 from typing import Union
 from scipy.stats import norm
+from scipy import linalg
 import matplotlib.pyplot as plt
 import seaborn as sns
 import arch
-import optuna 
+import optuna
 import math
 from abc import ABC, abstractmethod
 
-class Greeks:
+class Greeks(object):
   """
   Class to calculate the greeks for an option
   Inputs:
@@ -88,7 +89,7 @@ class Greeks:
       T = (self.date - pd.to_datetime('today')).days / 365
       r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
       sigma = option['impliedVolatility']
-      d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+      d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
       delta = norm.cdf(d1) - 1
       return delta
     
@@ -108,7 +109,7 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
     gamma = norm.pdf(d1) / (S * sigma * np.sqrt(T))
     return gamma
   
@@ -128,7 +129,7 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
     vega = S * norm.pdf(d1) * np.sqrt(T)
     return vega
   
@@ -148,7 +149,7 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
     vanna = -norm.pdf(d1) * d1 / sigma
     return vanna
   
@@ -170,7 +171,7 @@ class Greeks:
     sigma = option['impliedVolatility']
     dividends = self.fetcher.get_dividend_yield()
     r_adj = r - dividends
-    d1 = (np.log(S / K) + (r_adj + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r_adj + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     
     if self.call:
@@ -196,7 +197,7 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     if self.call:
       rho = K * T * np.exp(-r * T) * norm.cdf(d2)
@@ -220,7 +221,7 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     vomma = S * np.sqrt(T) * norm.pdf(d1) * (d1 * d2) / sigma
     return vomma
@@ -241,7 +242,7 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     charm = -norm.pdf(d1) * (2 * r * T - d2 * sigma * np.sqrt(T)) / (2 * T * sigma * np.sqrt(T))
     return charm
@@ -262,9 +263,8 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
-    d2 = d1 - sigma * np.sqrt(T)
-    speed = -norm.pdf(d1) / (S**2 * sigma * np.sqrt(T)) * (d1 + sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
+    speed = -norm.pdf(d1) / (S ** 2 * sigma * np.sqrt(T)) * (d1 + sigma * np.sqrt(T))
     return speed
   
   def calculate_zomma(self, risk_free_rate_horizon: str = '13 weeks') -> float:
@@ -283,9 +283,9 @@ class Greeks:
     T = (self.date - pd.to_datetime('today')).days / 365
     r = self.fetcher.get_risk_free_rate(risk_free_rate_horizon)['Close'].iloc[-1]
     sigma = option['impliedVolatility']
-    d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
+    d1 = (np.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
-    zomma = norm.pdf(d1) * (d1 * d2 - 1) / (S * sigma**2 * np.sqrt(T))
+    zomma = norm.pdf(d1) * (d1 * d2 - 1) / (S * sigma ** 2 * np.sqrt(T))
     return zomma
   
   def calculate_color(self, risk_free_rate_horizon: 'str' = '13 weeks') -> float:
@@ -327,7 +327,7 @@ class Greeks:
     sigma = option['impliedVolatility']
     d1 = (np.log(S/K) + (r + sigma**2 / 2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
-    ultima = S * np.sqrt(T) * norm.pdf(d1) * (d1 * d2 * (1 - d1 * d2) + d1**2 + d2**2) / sigma**2
+    ultima = S * np.sqrt(T) * norm.pdf(d1) * (d1 * d2 * (1 - d1 * d2) + d1 ** 2 + d2 ** 2) / sigma ** 2
     return ultima
   
   def calculate_lambda(self,risk_free_rate_horizon: str = '13 weeks') -> float:
@@ -342,122 +342,236 @@ class Greeks:
     S = dataframe['Close'].iloc[-1]  
     V = option['lastPrice'] 
     delta = self.calculate_delta(risk_free_rate_horizon)  
-
     lambda_ = delta * (S / V)
     return lambda_
 
 class Option(object):
-    def __init__(self, 
-                 S, 
-                 K, 
-                 r, 
-                 T, 
-                 N, 
-                 pu=0, 
-                 pd_=0, 
-                 div=0, 
-                 sigma=0, 
-                 call=True, 
-                 american=False):
-        """
-        Initialize the stock option base class. Defaults to European call unless specified.
-        Inputs: 
-          - S: initial stock price
-          - K: strike price
-          - r: risk-free interest rate
-          - T: time to maturity (in years)
-          - N: number of time steps
-          - pu: probability at up state
-          - pd: probability at down state
-          - div: Dividend yield
-          - call: True for a call option, False for a put option
-          - american: True for an American option,
-                False for a European option
-        """
-        self.S = S
-        self.K = K
-        self.r = r
-        self.T = T
-        self.N = max(1, N)
-        self.STs = [] 
-        self.pu, self.pd_= pu, pd_
-        self.div = div
-        self.sigma = sigma
-        self.is_call = call
-        self.is_european = american
+  def __init__(self, S, K, r, T, N, pu, pd_, div, sigma, call=True, american=False):
+    """
+    Inputs:
+    - S: float, the price of the underlying asset
+    - K: float, the strike price of the option
+    - r: float, the risk-free rate
+    - T: float, the time to expiration of the option
+    - N: int, the number of time steps
+    - pu: float, the probability at the up state
+    - pd_: float, the probability at the down state
+    - div: float, the dividend yield
+    - sigma: float, the volatility of the underlying asset
+    - call: bool, whether the option is a call or a put
+    - american: bool, whether the option is American or European
+    Internal class to implement all the tree methods for option pricing
+    Please do not use this class, it is for internal use only (I know, I should have put a _ in the name, but I didn't, so please don't use it)
+    """
+    self.S = S
+    self.K = K
+    self.r = r
+    self.T = T
+    self.N = max(1, N)
+    self.STs = [] 
+    self.pu, self.pd_= pu, pd_
+    self.div = div
+    self.sigma = sigma
+    self.is_call = call
+    self.is_european = not american
 
-    @property
-    def dt(self):
-        """ Single time step, in years """
-        return self.T/float(self.N)
+  @property
+  def dt(self) -> float:
+    """ Single time step, in years """
+    return self.T / float(self.N)
 
-    @property
-    def df(self):
-        """ The discount factor """
-        return math.exp(-(self.r-self.div)*self.dt)  
+  @property
+  def df(self) -> float:
+    """ The discount factor """
+    return math.exp(-(self.r - self.div) * self.dt)  
 
-class FiniteDifferences(object):
-    def __init__(self, 
-                 S, 
-                 K, 
-                 r, 
-                 T, 
-                 sigma, 
-                 Smax = 1, 
-                 M = 1, 
-                 N = 1, 
-                 call = True):
-        """This class is the base class for the finite difference methods, for you it's useless"""
-        self.S = S
-        self.K = K
-        self.r = r
-        self.T = T
-        self.sigma = sigma
-        self.Smax = Smax
-        self.M, self.N = M, N
-        self.is_call = not is_put
-        self.i_values = np.arange(self.M)
-        self.j_values = np.arange(self.N)
-        self.grid = np.zeros(shape=(self.M+1, self.N+1))
-        self.boundary_conds = np.linspace(0, Smax, self.M+1)
+class _FiniteDifferences(object):
+  def __init__(self, S, K, r, T, sigma, Smax, M, N, call):
+    """
+    Inputs:
+    - S: float, the price of the underlying asset
+    - K: float, the strike price of the option
+    - r: float, the risk-free rate
+    - T: float, the time to expiration of the option
+    - sigma: float, the volatility of the underlying asset
+    - Smax: float, the maximum price of the underlying asset
+    - M: int, the number of price steps
+    - N: int, the number of time steps
+    - call: bool, whether the option is a call or a put
+    Internal class to implement the Finite Difference Method for option pricing
+    Please do not use this class, it is for internal use only (I know, I should have put a _ in the name, but I didn't, so please don't use it)
+    """
+    self.S = S
+    self.K = K
+    self.r = r
+    self.T = T
+    self.sigma = sigma
+    self.Smax = Smax
+    self.M, self.N = M, N
+    self.is_call = call
+    self.i_values = np.arange(self.M)
+    self.j_values = np.arange(self.N)
+    self.grid = np.zeros(shape=(self.M + 1, self.N + 1))
+    self.boundary_conds = np.linspace(0, Smax, self.M+1)
 
-    @property
-    def dS(self):
-        return self.Smax/float(self.M)
+  @property
+  def dS(self) -> float:
+    """  Single step in S space"""
+    return self.Smax / float(self.M)
 
-    @property
-    def dt(self):
-        return self.T/float(self.N)
+  @property
+  def dt(self) -> float:
+    """" Single step in t space"""
+    return self.T / float(self.N)
 
-    @abstractmethod
-    def setup_boundary_conditions(self):
-        raise MethodError('What did I tell you? Useless')
+  @abstractmethod
+  def setup_boundary_conditions(self):
+    raise NotImplementedError('This method is implemented in the subclasses')
 
-    @abstractmethod
-    def setup_coefficients(self):
-        raise MethodError("Womp womp, you're not supposed to use this")
+  @abstractmethod
+  def setup_coefficients(self):
+    raise NotImplementedError('This method is implemented in the subclasses')
 
-    @abstractmethod
-    def traverse_grid(self):
-        """  
-        Iterate the grid backwards in time 
-        """
-        raise MethodError("This thing is useless, why are you even trying to use it?")
+  @abstractmethod
+  def traverse_grid(self):
+    raise NotImplementedError("This method is implemented in the subclasses")
+  @abstractmethod
 
-    @abstractmethod
-    def interpolate(self):
-        """
-        Use piecewise linear interpolation on the initial
-        grid column to get the closest price at S0.
-        """
-        return np.interp(
-            self.S, self.boundary_conds, self.grid[:,0])
+  def interpolate(self) -> float:
+    """
+    Use piecewise linear interpolation on the initial grid column to get the closest price at S.
+    """
+    return np.interp(self.S, self.boundary_conds, self.grid[:,0])
 
-    def price(self):
-        self.setup_boundary_conditions()
-        self.setup_coefficients()
-        self.traverse_grid()
-        return self.interpolate()
+  def price(self) -> float:
+    """ Entry point of the pricing method"""
+    self.setup_boundary_conditions()
+    self.setup_coefficients()
+    self.traverse_grid()
+    return self.interpolate()
+
+class _FDEU(_FiniteDifferences):
+  """
+  Class to implement the Explicit Finite Difference Method for option pricing,
+  Meant for internal use only
+  """
+  def setup_boundary_conditions(self):
+    """Setup the boundary conditions for the option pricing problem"""
+    if self.is_call:
+      self.grid[:,-1] = np.maximum(0, self.boundary_conds - self.K)
+      self.grid[-1,:-1] = (self.Smax-self.K) * np.exp(-self.r*self.dt*(self.N - self.j_values))
+    else:
+      self.grid[:,-1] = np.maximum(0, self.K-self.boundary_conds)
+      self.grid[0,:-1] = (self.K-self.Smax) * np.exp(-self.r*self.dt*(self.N-self.j_values))
+
+  def setup_coefficients(self):
+    """Setup the coefficients for the finite difference scheme"""
+    self.a = 0.5 * self.dt * ((self.sigma ** 2) * (self.i_values ** 2) - self.r * self.i_values)
+    self.b = 1 - self.dt * ((self.sigma ** 2) *(self.i_values ** 2) + self.r)
+    self.c = 0.5 * self.dt * ((self.sigma ** 2) * (self.i_values ** 2) + self.r * self.i_values)
+
+  def traverse_grid(self):
+    """Function to iterate the grid backwards in time"""
+    for j in reversed(self.j_values):
+      for i in range(self.M)[2:]:
+        self.grid[i,j] = self.a[i]*self.grid[i-1,j+1] + self.b[i]*self.grid[i,j+1] + self.c[i]*self.grid[i+1,j+1]
+                  
+class  _FDImpEU(_FDEU):
+  """
+  Internal class to implement the Implicit Finite Difference Method for option pricing
+  """
+  def setup_coefficients(self):
+    """Setup the coefficients for the implicit finite difference scheme"""
+    self.a = 0.5 * (self.r * self.dt * self.i_values - (self.sigma ** 2) * self.dt * (self.i_values ** 2))
+    self.b = 1 + (self.sigma ** 2) * self.dt * (self.i_values ** 2) + self.r * self.dt
+    self.c = -0.5 * (self.r * self.dt * self.i_values + (self.sigma ** 2) * self.dt * (self.i_values ** 2))
+    self.coeffs = np.diag(self.a[2:self.M],-1) + np.diag(self.b[1:self.M]) + np.diag(self.c[1:self.M-1],1)
+
+  def traverse_grid(self):
+    """ Solve using linear systems of equations """
+    P, L, U = linalg.lu(self.coeffs)
+    aux = np.zeros(self.M-1)
+    for i in reversed(range(self.N)):
+      aux[0] = np.dot(-self.a[1], self.grid[0, i])
+      x1 = linalg.solve(L, self.grid[1:self.M, i+1]+aux)
+      x2 = linalg.solve(U, x1)
+      self.grid[1:self.M, i] = x2
+
+class _FDCN(_FiniteDifferences):
+  """Internal class to implement the Crank-Nicolson Finite Difference Method for option pricing"""
+  def setup_coefficients(self):
+    """Setup the coefficients for the Crank-Nicolson scheme"""
+    self.alpha = 0.25 * self.dt * ((self.sigma ** 2) * (self.i_values ** 2) - self.r * self.i_values)
+    self.beta = -self.dt * 0.5 * ((self.sigma ** 2) * (self.i_values ** 2) + self.r)
+    self.gamma = 0.25 * self.dt * ((self.sigma ** 2) * (self.i_values ** 2) + self.r * self.i_values)
+    self.M1 = -np.diag(self.alpha[2:self.M], -1) + np.diag(1-self.beta[1:self.M]) - np.diag(self.gamma[1:self.M-1], 1)
+    self.M2 = np.diag(self.alpha[2:self.M], -1) + np.diag(1+self.beta[1:self.M]) + np.diag(self.gamma[1:self.M-1], 1)
+
+  def traverse_grid(self):
+    """ Solve using linear systems of equations """
+    P, L, U = linalg.lu(self.M1)
+    for j in reversed(range(self.N)):
+      x1 = linalg.solve(L, np.dot(self.M2, self.grid[1:self.M, j+1]))
+      x2 = linalg.solve(U, x1)
+      self.grid[1:self.M, j] = x2
+
+class _FDCNUS(_FDCN):
+  """Internal class to implement the Crank-Nicolson Finite Difference Method for american option pricing"""
+  def __init__(self, S, K, r, T, sigma, Smax, M, N, omega, tol, call):
+    super(FDCnAm, self).__init__(S, K, r=r, T=T, sigma=sigma, Smax=Smax, M=M, N=N, call=call)
+    self.omega = omega
+    self.tol = tol
+    self.i_values = np.arange(self.M+1)
+    self.j_values = np.arange(self.N+1)
+
+  def setup_boundary_conditions(self):
+    """Setup the boundary conditions for the option pricing problem"""
+    if self.is_call:
+      self.payoffs = np.maximum(0, self.boundary_conds[1:self.M] - self.K)
+    else:
+      self.payoffs = np.maximum(0, self.K - self.boundary_conds[1:self.M])
+    self.past_values = self.payoffs
+    self.boundary_values = self.K * np.exp(-self.r * self.dt * (self.N - self.j_values))
+        
+  def calculate_payoff_start_boundary(self, rhs, old_values):
+    """Calculate the payoff at the starting boundary"""
+    payoff = old_values[0] + self.omega / (1 - self.beta[1]) * (rhs[0] - (1 - self.beta[1]) * old_values[0] + self.gamma[1] * old_values[1])
+    return max(self.payoffs[0], payoff)      
+    
+  def calculate_payoff_end_boundary(self, rhs, old_values, new_values):
+    """Calculate the payoff at the ending boundary"""
+    payoff = old_values[-1] + self.omega / (1 - self.beta[-2]) * (rhs[-1] + self.alpha[-2] * new_values[-2] - (1 - self.beta[-2]) * old_values[-1])
+    return max(self.payoffs[-1], payoff)
+    
+  def calculate_payoff(self, k, rhs, old_values, new_values):
+    """Calculate the payoff at the k-th point"""
+    payoff = old_values[k] + self.omega / (1 - self.beta[k+1]) * (rhs[k] + self.alpha[k + 1] * new_values[k - 1] - (1 - self.beta[k + 1]) * old_values[k] + self.gamma[k + 1] * old_values[k + 1])
+    return max(self.payoffs[k], payoff)
+
+  def traverse_grid(self):
+    """ Solve using linear systems of equations """
+    aux = np.zeros(self.M - 1)
+    new_values = np.zeros(self.M - 1)
+    for j in reversed(range(self.N)):
+      aux[0] = self.alpha[1] * (self.boundary_values[j] + self.boundary_values[j + 1])
+      rhs = np.dot(self.M2, self.past_values) + aux
+      old_values = np.copy(self.past_values)
+      error = sys.float_info.max
+      while self.tol < error:
+        new_values[0] = self.calculate_payoff_start_boundary(rhs, old_values)            
+        for k in range(self.M-2)[1:]:
+          new_values[k] = self.calculate_payoff(k, rhs, old_values, new_values)                    
+        new_values[-1] = self.calculate_payoff_end_boundary(rhs, old_values, new_values)
+        error = np.linalg.norm(new_values-old_values)
+        old_values = np.copy(new_values)
+        self.past_values = np.copy(new_values)
+    self.values = np.concatenate(
+        ([self.boundary_values[0]], new_values, [0]))
+
+  def interpolate(self):
+    """ Use piecewise linear interpolation on the initial grid column to get the closest price at S."""
+    return np.interp(self.S0, self.boundary_conds, self.values)
+
 
 class OptionPricing(object):
   def __init__(self, 
@@ -479,7 +593,7 @@ class OptionPricing(object):
     else:
       raise ValueError('identification must be either a string or an integer')
     self.verbose = verbose
-    self.date = self.calculate_expiration()
+    self.date = self._calculate_expiration()
     self.is_call = call
     self.dividend_yield = self.fetcher.get_dividend_yield()
     if type(risk_free_rate) == str:
@@ -504,7 +618,7 @@ class OptionPricing(object):
       sigma = res.conditional_volatility
       self.sigma = sigma[-1]
 
-  def from_name_to_datestr(self, s: str) -> str:
+  def _from_name_to_datestr(self, s: str) -> str:
     """Helper function to convert the contract symbol to a date string"""
     if self.verbose:
       print(f"Processing {s}")
@@ -515,12 +629,12 @@ class OptionPricing(object):
     else:
         return "No date found"
   
-  def calculate_expiration(self) -> pd.Timestamp:
+  def _calculate_expiration(self) -> pd.Timestamp:
     """Function to calculate the expiration date of the option"""
     if self.verbose:
       print("Calculating expiration date")
     to_process = self.option['contractSymbol']
-    date_str = self.from_name_to_datestr(to_process)
+    date_str = self._from_name_to_datestr(to_process)
     date = pd.to_datetime(date_str)
     return date  
   
@@ -607,24 +721,90 @@ class OptionPricing(object):
     if method == 'finitedifference' or 'finite_difference':
       raise MethodError("Please specify between Explicit Finite Difference, Implicit Finite Difference and Crank-Nicolson Finite Difference")
     if method == 'explicitfinitedifference' or 'explicit' or 'explicitdifference' or 'explicitfinite':
+      if 'Smax' not in kwargs:
+        print("Smax not passed, using default value of 1000")
+      if 'M' not in kwargs:
+        print("M not passed, using default value of 1000")
+      if 'N' not in kwargs:
+        print("N not passed, using default value of 1000")
+      if describe:
+        print("The Explicit Finite Difference Method requires three optional values,")
+        print("Smax, which is the maximum value of the underlying asset")
+        print("M, which is the number of price steps")
+        print("N, which is the number of time steps")
       if self.american:
-        pass
+        raise MethodError("Nah brother, the Crank-Nicolson method broke me, I don't want to do this anymore")
       else:
-        pass
+        price = explicit_european(Smax, M, N)
       return price
     if method == 'implicitfinitedifference' or 'implicit' or 'implicitdifference' or 'implicitfinite':
+      if 'Smax' not in kwargs:
+        print("Smax not passed, using default value of 1000")
+      if 'M' not in kwargs:
+        print("M not passed, using default value of 1000")
+      if 'N' not in kwargs:
+        print("N not passed, using default value of 1000")
+      if describe:
+        print("The Implicit Finite Difference Method requires three optional values,")
+        print("Smax, which is the maximum value of the underlying asset")
+        print("M, which is the number of price steps")
+        print("N, which is the number of time steps")
       if self.american:
-        pass
+        raise MethodError("Nah brother, the Crank-Nicolson method broke me, I don't want to do this anymore")
       else:
-        pass
+        price = implicit_european(Smax, M, N)
       return price
     if method == 'crank-nicolsonfinitedifference' or 'crank-nicolson' or 'cranknicolson' or 'crank-nicolsonfinite' or 'crank-nicolsondifference' or 'cranknicolsonfinite' or 'cranknicolsondifference':
       if self.american:
-        pass
+        if 'Smax' not in kwargs:
+          print("Smax not passed, using default value of 1000")
+        if 'M' not in kwargs:
+          print("M not passed, using default value of 1000")
+        if 'N' not in kwargs:
+          print("N not passed, using default value of 1000")
+        if 'omega' not in kwargs:
+          print("omega not passed, using default value of 1.2")
+        if 'tol' not in kwargs:
+          print("tol not passed, using default value of 1e-6")
+        if describe:
+          print("The Crank-Nicolson Finite Difference Method for american options requires five optional values,")
+          print("Smax, which is the maximum value of the underlying asset")
+          print("M, which is the number of price steps")
+          print("N, which is the number of time steps")
+          print("omega, which is the relaxation factor")
+          print("tol, which is the tolerance")
+        price = crank_nicolson_american(Smax, M, N, omega, tol)
       else:
-        pass
+        if 'Smax' not in kwargs:
+          print("Smax not passed, using default value of 1000")
+        if 'M' not in kwargs:
+          print("M not passed, using default value of 1000")
+        if 'N' not in kwargs:
+          print("N not passed, using default value of 1000")
+        if describe:
+          print("The Crank-Nicolson Finite Difference Method for european options requires three optional values,")
+          print("Smax, which is the maximum value of the underlying asset")
+          print("M, which is the number of price steps")
+          print("N, which is the number of time steps")
+        price = crank_nicolson_european(Smax, M, N)
       return price
     raise MethodError(f"Method {method} not found")
+  
+  def crank_nicolson_american(self, Smax: int = 1000, M: int = 1000, N: int = 1000, omega: float = 1.2, tol: float = 1e-6) -> float:
+    us = _FDCNUS(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, omega, tol, self.is_call)
+    return us.price()
+
+  def crank_nicolson_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float:
+    eu = _FDCN(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
+    return eu.price()
+
+  def implicit_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float: 
+    eu = _FDImpEU(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
+    return eu.price() 
+
+  def explicit_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float: 
+    eu = _FDEU(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
+    return eu.price() 
 
   def trinom_american(self, N: int = 100, pd_: float = 0, pu: float = 0) -> float:
     Option = Option(self.S,
@@ -761,7 +941,7 @@ class OptionPricing(object):
     payoff = begin_tree_traversal()
     return payoff[0]
 
-  def europen_lr_tree(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
+  def european_lr_tree(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
     Option = Option(self.S,
                     self.K,
                     self.risk_free_rate,
@@ -990,10 +1170,3 @@ class OptionPricing(object):
     study.optimize(objective, n_trials=100)
     if self.verbose: print("Optimization complete")
     return study.best_params
-  
-
-## Yield curve/convexity bonds
-## Futures pricing
-## Commodities pricing
-## CDS pricing
-## credit spread of a company with risk free rate
