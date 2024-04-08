@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import pandas_datareader.data as web
 from .datafetcher import Fetcher
+
 class IndicatorCalculator:
     """
     A utility class for performing various technical analysis calculations on stock market data.
@@ -1005,3 +1006,11 @@ class IndicatorCalculator:
                 if col not in df.columns:
                     df[col] = new_df[col]
         return df
+
+    def __repr__(self) -> str:
+        if self.ticker is not None:
+            return f"Technical Indicators for {self.yf_stock.ticker}"
+        elif self.ticker is None and self.df is not None:
+            return "Technical Indicators for external dataframe"
+        else:
+            return "Technical Indicators class"
