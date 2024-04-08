@@ -1,3 +1,3 @@
 from stockdatamanager.datafetcher import Fetcher
 from stockdatamanager.indicators import IndicatorCalculator
-__version__ = '0.10.1'
+__version__ = '0.10.2'
