@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='stockdatamanager',
-    version='0.10.2',
+    version='0.10.3',
     packages=find_packages(),
     description='A comprehensive library for financial analysis',
     long_description=open('README.md').read(),
