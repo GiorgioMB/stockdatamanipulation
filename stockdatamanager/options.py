@@ -22,6 +22,7 @@ import arch
 import optuna
 import math
 from abc import ABC, abstractmethod
+import sys
 
 class Greeks(object):
   """
@@ -355,7 +356,7 @@ class Greeks(object):
     return lambda_
 
 class Option(object):
-  def __init__(self, S, K, r, T, N, pu, pd_, div, sigma, call=True, american=False):
+  def __init__(self, S, K, r, T, N, pu, pd_, div, sigma, call=True, american=False, verbose = False):
     """
     Inputs:
     - S: float, the price of the underlying asset
@@ -369,6 +370,7 @@ class Option(object):
     - sigma: float, the volatility of the underlying asset
     - call: bool, whether the option is a call or a put
     - american: bool, whether the option is American or European
+    - verbose: bool, the verbosity of the output
     Internal class to implement all the tree methods for option pricing
     Please do not use this class, it is for internal use only (I know, I should have put a _ in the name, but I didn't, so please don't use it)
     """
@@ -383,6 +385,7 @@ class Option(object):
     self.sigma = sigma
     self.is_call = call
     self.is_european = not american
+    self.verbose = verbose
 
   @property
   def dt(self) -> float:
@@ -485,7 +488,7 @@ class _FDEU(_FiniteDifferences):
       for i in range(self.M)[2:]:
         self.grid[i,j] = self.a[i]*self.grid[i-1,j+1] + self.b[i]*self.grid[i,j+1] + self.c[i]*self.grid[i+1,j+1]
                   
-class  _FDImpEU(_FDEU):
+class _FDImpEU(_FDEU):
   """
   Internal class to implement the Implicit Finite Difference Method for option pricing
   """
@@ -506,7 +509,7 @@ class  _FDImpEU(_FDEU):
       x2 = linalg.solve(U, x1)
       self.grid[1:self.M, i] = x2
 
-class _FDCN(_FiniteDifferences):
+class _FDCN(_FDEU):
   """Internal class to implement the Crank-Nicolson Finite Difference Method for option pricing"""
   def setup_coefficients(self):
     """Setup the coefficients for the Crank-Nicolson scheme"""
@@ -639,7 +642,7 @@ class _TrinomialLattice(Option):
     self.M = 2 * self.N + 1
   def init_stock_price_tree(self):
       self.STs = np.zeros(self.M)
-      self.STs[0] = self.S0 * self.u**self.N
+      self.STs[0] = self.S * self.u**self.N
       for i in range(self.M)[1:]:
           self.STs[i] = self.STs[i-1]*self.d
   def init_payoffs_tree(self):
@@ -671,6 +674,187 @@ class _TrinomialLattice(Option):
       payoffs = self.begin_tree_traversal()
       return payoffs[0]
 
+class _BinomialTree(Option):
+  """Internal class to implement the Binomial Tree Method for option pricing"""
+  def setup_parameters(self):
+    if self.verbose: print("Setting up parameters")
+    self.M = self.N + 1  
+    self.u = 1 + self.pu
+    self.d = 1 - self.pd_
+    self.qu = (math.exp((self.r-self.div)*self.dt)-self.d)/(self.u-self.d)
+    self.qd = 1-self.qu
+    if self.verbose: print("Parameters set up")
+
+  def init_stock_price_tree(self):
+    """ Initialize the stock price tree """
+    if self.verbose: print("Initializing stock price tree")
+    self.STs = np.zeros(self.M)
+    for i in range(self.M):
+        self.STs[i] = self.S * (self.u**(self.N-i)) * (self.d**i)
+    if self.verbose: print(f"Stock price tree initialized")
+
+  def init_payoffs_tree(self):
+    """
+    Returns the payoffs when the option 
+    expires at terminal nodes
+    """
+    if self.verbose: print("Initializing payoffs tree") 
+    if self.is_call:
+      return np.maximum(0, self.STs-self.K)
+    else:
+        return np.maximum(0, self.K-self.STs)
+    
+  def traverse_tree(self, payoffs):
+    """
+    Starting from the time the option expires, traverse
+    backwards and calculate discounted payoffs at each node
+    """
+    if self.verbose: print("Traversing tree")
+    for i in range(self.N):
+      payoffs = (payoffs[:-1]*self.qu + payoffs[1:]*self.qd)*self.df
+    if self.verbose: print("Tree traversal complete")
+    return payoffs
+  
+  def begin_tree_traversal(self):
+    """Traversal of the tree from the beginning"""
+    if self.verbose: print("Beginning tree traversal")
+    payoffs = self.init_payoffs_tree()
+    return self.traverse_tree(payoffs)
+  
+  def price(self):
+    """ Entry point of the pricing implementation """
+    if self.verbose: print("Pricing the option")
+    self.setup_parameters()
+    self.init_stock_price_tree()
+    payoffs = self.begin_tree_traversal()
+    if self.verbose: print("Option priced")
+    return payoffs[0]
+
+class _USBinomialTree(_BinomialTree):
+  def init_stock_price_tree(self):
+    if self.verbose: print("Initializing stock price tree")
+    self.STs = [np.array([self.S])]
+    for i in range(self.N):
+      prev_branches = self.STs[-1]
+      st = np.concatenate(
+          (prev_branches*self.u, 
+           [prev_branches[-1]*self.d]))
+      self.STs.append(st)
+    if self.verbose: print("Stock price tree initialized")
+
+  def init_payoffs_tree(self):
+    if self.verbose: print("Initializing payoffs tree")
+    if self.is_call:
+        return np.maximum(0, self.STs[self.N]-self.K)
+    else:
+        return np.maximum(0, self.K-self.STs[self.N])
+
+  def check_early_exercise(self, payoffs, node):
+    if self.is_call:
+        return np.maximum(payoffs, self.STs[node] - self.K)
+    else:
+        return np.maximum(payoffs, self.K - self.STs[node])
+
+  def traverse_tree(self, payoffs):
+    if self.verbose: print("Traversing tree")
+    for i in reversed(range(self.N)):
+        payoffs = (payoffs[:-1]*self.qu + payoffs[1:]*self.qd)*self.df
+        payoffs = self.check_early_exercise(payoffs,i)
+    if self.verbose: print("Tree traversal complete")
+    return payoffs
+  
+class _BinomialCRR(_USBinomialTree):
+  def setup_parameters(self):
+    if self.verbose: print("Setting up parameters")
+    self.u = math.exp(self.sigma * math.sqrt(self.dt))
+    self.d = 1./self.u
+    self.qu = (math.exp((self.r-self.div)*self.dt) - 
+               self.d)/(self.u-self.d)
+    self.qd = 1-self.qu
+  
+  def traverse_tree(self, payoffs):
+    if self.verbose: print("Traversing tree")
+    for i in reversed(range(self.N)):
+        payoffs = (payoffs[:-1]*self.qu + payoffs[1:]*self.qd)*self.df
+        if not self.is_european:
+          payoffs = self.check_early_exercise(payoffs,i)
+    if self.verbose: print("Tree traversal complete")
+    return payoffs
+  
+class _BinomialLR(_USBinomialTree):
+  def setup_parameters(self):
+    if self.verbose: print("Setting up parameters")
+    odd_N = self.N if (self.N%2 == 0) else (self.N+1)
+    d1 = (math.log(self.S/self.K) + ((self.r-self.div) + (self.sigma**2)/2.)*self.T)/ (self.sigma*math.sqrt(self.T))
+    d2 = (math.log(self.S/self.K) +
+          ((self.r-self.div) -
+           (self.sigma**2)/2.)*self.T)/\
+        (self.sigma * math.sqrt(self.T))
+    pbar = self.pp_2_inversion(d1, odd_N)
+    self.p = self.pp_2_inversion(d2, odd_N)
+    self.u = 1/self.df * pbar/self.p
+    self.d = (1/self.df-self.p*self.u)/(1-self.p)
+    self.qu = self.p
+    self.qd = 1-self.p
+    if self.verbose: print("Parameters set up")
+
+  def pp_2_inversion(self, z, n):
+    if self.verbose: print("Calculating the Peizer-Pratt inversion")
+    return .5 + math.copysign(1, z)*\
+        math.sqrt(.25 - .25*
+            math.exp(
+                -((z/(n+1./3.+.1/(n+1)))**2.)*(n+1./6.)
+            )
+        )  
+  def traverse_tree(self, payoffs):
+    if self.verbose: print("Traversing tree")
+    for i in reversed(range(self.N)):
+        payoffs = (payoffs[:-1]*self.qu + payoffs[1:]*self.qd)*self.df
+        if not self.is_european:
+          payoffs = self.check_early_exercise(payoffs,i)
+    if self.verbose: print("Tree traversal complete")
+    return payoffs 
+
+class _TrinomialTree(_USBinomialTree):
+  def setup_parameters(self):
+    """ Required calculations for the model """
+    self.u = math.exp(self.sigma*math.sqrt(2.*self.dt))
+    self.d = 1/self.u
+    self.m = 1
+    self.qu = ((math.exp((self.r-self.div) *
+                         self.dt/2.) -
+                math.exp(-self.sigma *
+                         math.sqrt(self.dt/2.))) /
+               (math.exp(self.sigma *
+                         math.sqrt(self.dt/2.)) -
+                math.exp(-self.sigma *
+                         math.sqrt(self.dt/2.))))**2
+    self.qd = ((math.exp(self.sigma *
+                         math.sqrt(self.dt/2.)) -
+                math.exp((self.r-self.div) *
+                         self.dt/2.)) /
+               (math.exp(self.sigma *
+                         math.sqrt(self.dt/2.)) -
+                math.exp(-self.sigma *
+                         math.sqrt(self.dt/2.))))**2.
+    self.qm = 1 - self.qu - self.qd
+  def init_stock_price_tree(self):
+    self.STs = [np.array([self.S])]
+    for i in range(self.N):
+        prev_nodes = self.STs[-1]
+        self.ST = np.concatenate(
+            (prev_nodes*self.u, [prev_nodes[-1]*self.m,
+                                 prev_nodes[-1]*self.d]))
+        self.STs.append(self.ST)
+  def traverse_tree(self, payoffs):
+    for i in reversed(range(self.N)):
+        payoffs = (payoffs[:-2] * self.qu +
+                   payoffs[1:-1] * self.qm +
+                   payoffs[2:] * self.qd) * self.df
+        if not self.is_european:
+            payoffs = self.check_early_exercise(payoffs,i)
+    return payoffs
+
 class OptionPricing(object):
   def __init__(self, 
                ticker: str,
@@ -680,6 +864,7 @@ class OptionPricing(object):
                identification: Union[str, int],
                use_yfinance_volatility: bool = True,
                optimize_garch: bool = False,
+               optimization_rounds = 100,
                verbose: bool = False):
     self.fetcher = Fetcher(ticker)
     self.dataframe, self.yf_ticker = self.fetcher.df, self.fetcher.yf_stock
@@ -700,6 +885,7 @@ class OptionPricing(object):
       self.risk_free_rate = risk_free_rate
     else:
       raise ValueError('risk_free_rate must be either a string representing the horizon or a value')
+    self.r = self.risk_free_rate
     self.S = self.dataframe['Close'].iloc[-1]
     self.T = (self.date - pd.to_datetime('today')).days / 365
     self.K = self.option['strike']
@@ -708,10 +894,10 @@ class OptionPricing(object):
       self.sigma = self.option['impliedVolatility']
     else:
       if optimize_garch:
-        garch_params = self.optimize_garch_model()
+        garch_params = self.optimize_garch_model(optimization_rounds)
         self.build_garch_model(**garch_params)
       else:
-        self.build_garch_model('GARCH', 'Constant', 1, 1, 'normal')
+        self.build_garch_model('GARCH', 'Constant', 1, 1, 'normal', 0, 2, None, None) 
       res = self.garch_model.fit(disp='off')
       sigma = res.conditional_volatility
       self.sigma = sigma[-1]
@@ -734,9 +920,9 @@ class OptionPricing(object):
     to_process = self.option['contractSymbol']
     date_str = self._from_name_to_datestr(to_process)
     date = pd.to_datetime(date_str)
-    return date  
+    return date 
   
-  def calculate_option_price(self, method: str, describe: bool, **kwargs) -> float:
+  def calculate_option_price(self, method: str, describe: bool = False, **kwargs) -> float:
     """
     Main wrapper function to calculate the price of an option using the specified method.
     Inputs:
@@ -746,9 +932,8 @@ class OptionPricing(object):
     Returns:
       - price: float, the price of the option
     """
-    ##Remove spaces and upper cases from the method
     method = method.replace(' ', '').lower()
-    if method == 'binomialtree' or 'binomial':
+    if method in ('binomialtree', 'binomial', 'binomtree', 'binom'):
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
       if 'pd_' not in kwargs:
@@ -760,12 +945,15 @@ class OptionPricing(object):
         print("N, which is the number of time steps")
         print("pd_, which is the probability at the down state")
         print("pu, which is the probability at the up state")
+      N = kwargs.get('N', 1000)
+      pd_ = kwargs.get('pd_', 1e-2)
+      pu = kwargs.get('pu', 1e-2)
       if self.american:
         price = self.binom_american(N, pd_, pu)
       else:
         price = self.binom_european(N, pd_, pu)
       return price
-    if method == 'binomiallatice' or 'binomial_lattice' or 'binomlattice' or 'binom_lattice':
+    if method in ('binomiallatice', 'binomial_lattice', 'binomlattice', 'binom_lattice'):
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
       if 'pd_' not in kwargs:
@@ -777,9 +965,12 @@ class OptionPricing(object):
         print("N, which is the number of time steps")
         print("pd_, which is the probability at the down state")
         print("pu, which is the probability at the up state")
-      price = self.binomial_lattice(N, pd_, pu)
+      N = kwargs.get('N', 1000)
+      pd_ = kwargs.get('pd_', 0)
+      pu = kwargs.get('pu', 0)
+      price = self.binom_lattice(N, pd_, pu)
       return price
-    if method == 'cox-ross-rubinstein' or 'coxrossrubinstein' or 'crr':
+    if method in ('cox-ross-rubinstein', 'cox', 'coxrossrubinstein', 'crr'):
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
       if 'pd_' not in kwargs:
@@ -791,68 +982,58 @@ class OptionPricing(object):
         print("N, which is the number of time steps")
         print("pd_, which is the probability at the down state")
         print("pu, which is the probability at the up state")
-      if self.american:
-        price = self.us_cox_ross_rubinstein(N, pd_, pu)
-      else:
-        price = self.eu_cox_ross_rubinstein(N, pd_, pu)
+      N = kwargs.get('N', 1000)
+      pd_ = kwargs.get('pd_', 1e-2)
+      pu = kwargs.get('pu', 1e-2)
+      price = self.cox_ross_rubinstein(N, pd_, pu)
       return price
-    if method == 'leisen-reimertree' or 'lrtee':
+    if method in ('leisen-reimertree', 'lrtree', 'lr'):
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
-      if 'pd_' not in kwargs:
-        print("pd_ not passed, using default value of 0")
-      if 'pu' not in kwargs:
-        print("pu not passed, using default value of 0")
       if describe:
-        print("The Leisen-Reimer Tree Method requires three optional values,")
+        print("The Leisen-Reimer Tree Method requires one optional value,")
         print("N, which is the number of time steps")
-        print("pd_, which is the probability at the down state")
-        print("pu, which is the probability at the up state")
-      if self.american:
-        price = self.us_lr_tree(N, pd_, pu)
-      else:
-        price = self.european_lr_tree(N, pd_, pu)
+      N = kwargs.get('N', 1000)
+      price = self.lr_tree(N)
       return price
-    if method == 'trinomialtree' or 'trinomial':
+    if method in ('trinomialtree', 'trinomial', 'trinom'):
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
-      if 'pd_' not in kwargs:
-        print("pd_ not passed, using default value of 0")
-      if 'pu' not in kwargs:
-        print("pu not passed, using default value of 0")
+      N = kwargs.get('N', 1000)
       if describe:
-        print("The Trinomial Tree Method requires three optional values,")
+        print("The Trinomial Tree Method requires one optional value,")
         print("N, which is the number of time steps")
-        print("pd_, which is the probability at the down state")
-        print("pu, which is the probability at the up state")
-      if self.american:
-        price = self.trinom_american(N, pd_, pu)
-      else:
-        price = self.trinom_european(N, pd_, pu)
+      price = self.trinom(N)
       return price
-    if method == 'trinomiallattice' or 'trinomial_lattice' or 'trinomlattice' or 'trinom_lattice':
+    if method in ('trinomiallattice', 'trinomial_lattice', 'trinomlattice', 'trinom_lattice'):
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
       if 'pd_' not in kwargs:
         print("pd_ not passed, using default value of 0")
       if 'pu' not in kwargs:
         print("pu not passed, using default value of 0")
+      N = kwargs.get('N', 1000)
+      pd_ = kwargs.get('pd_', 0)
+      pu = kwargs.get('pu', 0)
       if describe:
         print("The Trinomial Lattice Method requires three optional values,")
         print("N, which is the number of time steps")
         print("pd_, which is the probability at the down state")
         print("pu, which is the probability at the up state")
-      price = self.trinomial_lattice(N, pd_, pu)
+      price = self.trinom_lattice(N, pd_, pu)
       return price
-    if method == 'finitedifference' or 'finite_difference':
+    if method in ('finitedifference', 'finite_difference'):
       raise MethodError("Please specify between Explicit Finite Difference, Implicit Finite Difference and Crank-Nicolson Finite Difference")
-    if method == 'explicitfinitedifference' or 'explicit' or 'explicitdifference' or 'explicitfinite':
+    if method in ('explicitfinitedifference', 'explicit', 'explicitdifference', 'explicitfinite', 'explicit_difference'):
       if 'Smax' not in kwargs:
         print("Smax not passed, using default value of 1000")
       if 'M' not in kwargs:
         print("M not passed, using default value of 1000")
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
+      Smax = kwargs.get('Smax', 1000)
+      M = kwargs.get('M', 1000)
+      N = kwargs.get('N', 1000)
       if describe:
         print("The Explicit Finite Difference Method requires three optional values,")
         print("Smax, which is the maximum value of the underlying asset")
@@ -861,15 +1042,18 @@ class OptionPricing(object):
       if self.american:
         raise MethodError("Nah brother, the Crank-Nicolson method broke me, I don't want to do this anymore")
       else:
-        price = explicit_european(Smax, M, N)
+        price = self.explicit_european(Smax, M, N)
       return price
-    if method == 'implicitfinitedifference' or 'implicit' or 'implicitdifference' or 'implicitfinite':
+    if method in ('implicitfinitedifference', 'implicit', 'implicitdifference', 'implicitfinite'):
       if 'Smax' not in kwargs:
         print("Smax not passed, using default value of 1000")
       if 'M' not in kwargs:
         print("M not passed, using default value of 1000")
       if 'N' not in kwargs:
         print("N not passed, using default value of 1000")
+      Smax = kwargs.get('Smax', 1000)
+      M = kwargs.get('M', 1000)
+      N = kwargs.get('N', 1000)
       if describe:
         print("The Implicit Finite Difference Method requires three optional values,")
         print("Smax, which is the maximum value of the underlying asset")
@@ -878,20 +1062,25 @@ class OptionPricing(object):
       if self.american:
         raise MethodError("Nah brother, the Crank-Nicolson method broke me, I don't want to do this anymore")
       else:
-        price = implicit_european(Smax, M, N)
+        price = self.implicit_european(Smax, M, N)
       return price
-    if method == 'crank-nicolsonfinitedifference' or 'crank-nicolson' or 'cranknicolson' or 'crank-nicolsonfinite' or 'crank-nicolsondifference' or 'cranknicolsonfinite' or 'cranknicolsondifference':
+    if method in ('crank-nicolsonfinitedifference', 'crank-nicolson', 'cranknicolson', 'crank-nicolsonfinite', 'crank-nicolsondifference', 'cranknicolsonfinite', 'cranknicolsondifference', 'crank_nicolson', 'crank_nicolson_finite', 'crank_nicolson_difference','crank_nicolson_finite_difference', 'cnfd', 'cn'):
       if self.american:
         if 'Smax' not in kwargs:
           print("Smax not passed, using default value of 1000")
         if 'M' not in kwargs:
-          print("M not passed, using default value of 1000")
+          print("M not passed, using default value of 100")
         if 'N' not in kwargs:
-          print("N not passed, using default value of 1000")
+          print("N not passed, using default value of 100")
         if 'omega' not in kwargs:
           print("omega not passed, using default value of 1.2")
         if 'tol' not in kwargs:
-          print("tol not passed, using default value of 1e-6")
+          print("tol not passed, using default value of 1e-2")
+        Smax = kwargs.get('Smax', 1000)
+        M = kwargs.get('M', 100)
+        N = kwargs.get('N', 100)
+        omega = kwargs.get('omega', 1.2)
+        tol = kwargs.get('tol', 1e-2)
         if describe:
           print("The Crank-Nicolson Finite Difference Method for american options requires five optional values,")
           print("Smax, which is the maximum value of the underlying asset")
@@ -899,28 +1088,32 @@ class OptionPricing(object):
           print("N, which is the number of time steps")
           print("omega, which is the relaxation factor")
           print("tol, which is the tolerance")
-        price = crank_nicolson_american(Smax, M, N, omega, tol)
+        price = self.crank_nicolson_american(Smax, M, N, omega, tol)
       else:
         if 'Smax' not in kwargs:
           print("Smax not passed, using default value of 1000")
         if 'M' not in kwargs:
-          print("M not passed, using default value of 1000")
+          print("M not passed, using default value of 100")
         if 'N' not in kwargs:
-          print("N not passed, using default value of 1000")
+          print("N not passed, using default value of 100")
+        Smax = kwargs.get('Smax', 1000)
+        M = kwargs.get('M', 100)
+        N = kwargs.get('N', 100)
         if describe:
           print("The Crank-Nicolson Finite Difference Method for european options requires three optional values,")
           print("Smax, which is the maximum value of the underlying asset")
           print("M, which is the number of price steps")
           print("N, which is the number of time steps")
-        price = crank_nicolson_european(Smax, M, N)
+        price = self.crank_nicolson_european(Smax, M, N)
       return price
     raise MethodError(f"Method {method} not found")
   
-  def crank_nicolson_american(self, Smax: int = 1000, M: int = 1000, N: int = 1000, omega: float = 1.2, tol: float = 1e-6) -> float:
+  def crank_nicolson_american(self, Smax: int = 1000, M: int = 100, N: int = 100, omega: float = 1.2, tol: float = 1e-3) -> float:
     us = _FDCNUS(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, omega, tol, self.is_call)
     return us.price()
 
-  def crank_nicolson_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float:
+  def crank_nicolson_european(self, Smax: int = 1000, M: int = 100, N: int = 100) -> float:
+    ## Error: NotImplementedError: This method is implemented in the subclasses
     eu = _FDCN(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
     return eu.price()
 
@@ -928,399 +1121,84 @@ class OptionPricing(object):
     eu = _FDImpEU(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
     return eu.price() 
 
-  def explicit_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float: 
+  def explicit_european(self, Smax: int = 1000, M: int = 1000, N: int = 1000) -> float:
+    ## Error: /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/stockdatamanager/options.py:487: RuntimeWarning: overflow encountered in scalar add
+    ## self.grid[i,j] = self.a[i]*self.grid[i-1,j+1] + self.b[i]*self.grid[i,j+1] + self.c[i]*self.grid[i+1,j+1]
     eu = _FDEU(self.S, self.K, self.r, self.T, self.sigma, Smax, M, N, self.is_call)
     return eu.price() 
 
   def trinom_lattice(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = _TrinomialLattice(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
+    option = _TrinomialLattice(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american)
     return option.price()
 
   def binom_lattice(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = _BinomialCRRLattice(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
+    option = _BinomialCRRLattice(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american)
     return option.price()
 
-  def trinom_american(self, N: int = 100, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    u = np.exp(option.sigma * np.sqrt(2 * option.dt))
-    d = 1 / u
-    m = 1
-    qu = ((np.exp((option.r - option.div) * option.dt / 2) - np.exp(-option.sigma * np.sqrt(option.dt / 2))) / (np.exp(option.sigma * np.sqrt(option.dt / 2)) - np.exp(-option.sigma * np.sqrt(option.dt / 2)))) ** 2
-    qd = ((np.exp(option.sigma * np.sqrt(option.dt / 2)) - np.exp((option.r - option.div) * option.dt / 2)) / (np.exp(option.sigma * np.sqrt(option.dt / 2)) - np.exp(-option.sigma * np.sqrt(option.dt / 2)))) ** 2
-    qm = 1 - qu - qd
-    def init_stock_price_tree():
-      option.STs = [np.array([option.S])]
-      for i in range(N):
-        prev_branches = option.STs[-1]
-        st = np.concatenate((prev_branches * u, [prev_branches[-1]* m, prev_branches[-1]* d]))
-        option.STs.append(st)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def check_early(payoffs, node):
-      if self.is_call:
-        return np.maximum(payoffs, self.STs[node] - self.K)
-      else:
-        return np.maximum(payoffs, self.K - self.STs[node])
-    def traverse_tree(payoffs):
-      for i in reversed(range(N)):
-        payoffs = check_early((payoffs[:-2] * qu + payoffs[1:-1] * qm + payoffs[2:] * qd) * option.df, i)
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
+  def trinom(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
+    option = _TrinomialTree(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american, self.verbose)
+    return option.price()
+  
+  def lr_tree(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
+    opt = _BinomialLR(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american, self.verbose)
+    return opt.price()
 
-  def trinom_european(self, N: int = 100, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    u = np.exp(option.sigma * np.sqrt(2 * option.dt))
-    d = 1 / u
-    m = 1
-    qu = ((np.exp((option.r - option.div) * option.dt / 2) - np.exp(-option.sigma * np.sqrt(option.dt / 2))) / (np.exp(option.sigma * np.sqrt(option.dt / 2)) - np.exp(-option.sigma * np.sqrt(option.dt / 2)))) ** 2
-    qd = ((np.exp(option.sigma * np.sqrt(option.dt / 2)) - np.exp((option.r - option.div) * option.dt / 2)) / (np.exp(option.sigma * np.sqrt(option.dt / 2)) - np.exp(-option.sigma * np.sqrt(option.dt / 2)))) ** 2
-    qm = 1 - qu - qd
-    def init_stock_price_tree():
-      option.STs = [np.array([option.S])]
-      for i in range(N):
-        prev_branches = option.STs[-1]
-        st = np.concatenate((prev_branches * u, [prev_branches[-1]* m, prev_branches[-1]* d]))
-        option.STs.append(st)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def traverse_tree(payoffs):
-      for i in reversed(range(N)):
-        payoffs = (payoffs[:-2] * qu + payoffs[1:-1] * qm + payoffs[2:] * qd) * option.df
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
-    
-  def us_lr_tree(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    odd_N = N if N % 2 == 1 else N + 1
-    def pp_2_inversion(z, n):
-        return .5 + math.copysign(1, z) * math.sqrt(.25 - .25 * math.exp( -((z / (n + 1 / 3+ .1 / (n + 1))) ** 2.) * (n + 1/6)))
-    d1 = (np.log(option.S / option.K) + ((option.r - option.div) + (option.sigma ** 2) / 2) * option.T) / (option.sigma * np.sqrt(option.T))
-    d2 = (np.log(option.S / option.K) + ((option.r - option.div) - (option.sigma ** 2) / 2) * option.T) / (option.sigma * np.sqrt(option.T))
-    pbar = pp_2_inversion(d1, odd_N)
-    p = pp_2_inversion(d2, odd_N)
-    u = 1 / option.df * pbar / p
-    d = (1/option.df - p * u) / (1 - p)
-    qu = p
-    qd = 1 - p
-    def init_stock_price_tree():
-      option.STs = [np.array([option.S])]
-      for i in range(N):
-        prev_branches = option.STs[-1]
-        st = np.concatenate((prev_branches * u, [prev_branches[-1]* d]))
-        option.STs.append(st)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def check_early(payoffs, node):
-      if self.is_call:
-        return np.maximum(payoffs, self.STs[node] - self.K)
-      else:
-        return np.maximum(payoffs, self.K - self.STs[node])
-    def traverse_tree(payoffs):
-      for i in reversed(range(N)):
-        payoffs = check_early((payoffs[:-1] * qu + payoffs[1:] * qd) * option.df, i)
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
-
-  def european_lr_tree(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    odd_N = N if N % 2 == 1 else N + 1
-    def pp_2_inversion(z, n):
-        return .5 + math.copysign(1, z) * math.sqrt(.25 - .25 * math.exp( -((z / (n + 1 / 3+ .1 / (n + 1))) ** 2.) * (n + 1/6)))
-    d1 = (np.log(option.S / option.K) + ((option.r - option.div) + (option.sigma ** 2) / 2) * option.T) / (option.sigma * np.sqrt(option.T))
-    d2 = (np.log(option.S / option.K) + ((option.r - option.div) - (option.sigma ** 2) / 2) * option.T) / (option.sigma * np.sqrt(option.T))
-    pbar = pp_2_inversion(d1, odd_N)
-    p = pp_2_inversion(d2, odd_N)
-    u = 1 / option.df * pbar / p
-    d = (1/option.df - p * u) / (1 - p)
-    qu = p
-    qd = 1 - p
-    def init_stock_price_tree():
-      option.STs = np.zeros(M)
-      for i in range(M):
-        option.STs[i] = self.S * (u ** (N - i)) * (d ** i)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def traverse_tree(payoffs):
-      for i in range(N):
-        payoffs = (payoffs[:-1] * qu + payoffs[1:] * qd) * option.df
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
-
-  def eu_cox_ross_rubinstein(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    u = math.exp(option.sigma * math.sqrt(option.dt))
-    d = 1 / u
-    qu = (math.exp(option.r - option.div) - d) / (u - d)
-    qd = 1 - qu
-    def init_stock_price_tree():
-      option.STs = np.zeros(M)
-      for i in range(M):
-        option.STs[i] = self.S * (u ** (N - i)) * (d ** i)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def traverse_tree(payoffs):
-      for i in range(N):
-        payoffs = (payoffs[:-1] * qu + payoffs[1:] * qd) * option.df
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
-
-  def us_cox_ross_rubinstein(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    u = math.exp(option.sigma * math.sqrt(option.dt))
-    d = 1 / u
-    qu = (math.exp(option.r - option.div) - d) / (u - d)
-    qd = 1 - qu
-    def init_stock_price_tree():
-      option.STs = [np.array([option.S])]
-      for i in range(N):
-        prev_branches = option.STs[-1]
-        st = np.concatenate((prev_branches * u, [prev_branches[-1]* d]))
-        option.STs.append(st)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def check_early(payoffs, node):
-      if self.is_call:
-        return np.maximum(payoffs, self.STs[node] - self.K)
-      else:
-        return np.maximum(payoffs, self.K - self.STs[node])
-    def traverse_tree(payoffs):
-      for i in reversed(range(N)):
-        payoffs = check_early((payoffs[:-1] * qu + payoffs[1:] * qd) * option.df, i)
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
+  def cox_ross_rubinstein(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
+    opt = _BinomialCRR(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american, self.verbose)
+    return opt.price()
 
   def binom_american(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S,
-                    self.K,
-                    self.risk_free_rate,
-                    self.T,
-                    N,
-                    pu,
-                    pd_,
-                    self.dividend_yield,
-                    self.sigma,
-                    self.is_call,
-                    self.american)
-    u = 1 + pu
-    d = 1 - pd_
-    qu = (math.exp(option.r - option.div) * option.dt) - d / (u - d)
-    qd = 1 - qu
-    def init_stock_price_tree():
-      option.STs = [np.array([option.S])]
-      for i in range(N):
-        prev_branches = option.STs[-1]
-        st = np.concatenate((prev_branches * u, [prev_branches[-1]* d]))
-        option.STs.append(st)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def check_early(payoffs, node):
-      if self.is_call:
-        return np.maximum(payoffs, self.STs[node] - self.K)
-      else:
-        return np.maximum(payoffs, self.K - self.STs[node])
-    def traverse_tree(payoffs):
-      for i in reversed(range(N)):
-        payoffs = check_early((payoffs[:-1] * qu + payoffs[1:] * qd) * option.df, i)
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
+    us = _USBinomialTree(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american, self.verbose)
+    return us.price()
   
-  def binom_european(self, N: int = 1000, pd_: float = 0, pu: float = 0) -> float:
-    option = Option(self.S, 
-                    self.K, 
-                    self.risk_free_rate, 
-                    self.T, 
-                    N, 
-                    pu, 
-                    pd_, 
-                    self.dividend_yield, 
-                    self.sigma, 
-                    self.is_call, 
-                    self.american)
-    M = N + 1
-    u = 1 + pu
-    d = 1 - pd_
-    qu =(math.exp(option.r - option.div) * option.dt) - d / (u - d)
-    qd = 1 - qu
-    def init_stock_price_tree():
-      option.STs = np.zeros(M)
-      for i in range(M):
-        option.STs[i] = self.S * (u ** (N - i)) * (d ** i)
-    def init_payoffs_tree():
-      if self.is_call:
-        return np.maximum(0, option.STs - option.K)
-      else:
-        return np.maximum(0, option.K - option.STs)
-    def traverse_tree(payoffs):
-      for i in range(N):
-        payoffs = (payoffs[:-1] * qu + payoffs[1:] * qd) * option.df
-      return payoffs
-    def begin_tree_traversal():
-      payoffs = init_payoffs_tree()
-      return traverse_tree(payoffs)
-    init_stock_price_tree()
-    payoff = begin_tree_traversal()
-    return payoff[0]
+  def binom_european(self, N: int, pd_: float, pu: float) -> float:
+    eu = _BinomialTree(self.S, self.K, self.risk_free_rate, self.T, N, pu, pd_, self.dividend_yield, self.sigma, self.is_call, self.american, self.verbose)
+    return eu.price()
   
-  def build_garch_model(self, vol, mean, p, q, dist):
+  def build_garch_model(self, vol, mean, p, q, dist, o, power, hold_back, rescale):
     if self.verbose: print("Building GARCH model")
-    target_val = self.df['Close'].pct_change().dropna() * 100
-    self.garch_model = arch.arch_model(target_val, 
-                                       vol = vol, 
-                                       mean = mean,
-                                       p=p, 
-                                       q=q, 
-                                       dist=dist)
+    target_val = self.dataframe['Close'].pct_change().dropna() * 100
+    self.garch_model = arch.arch_model(target_val, vol = vol, mean = mean, p=p, q=q, dist=dist, o=o, power=power, hold_back=hold_back, rescale=rescale)
     if self.verbose: print("GARCH model built")
 
-  def optimize_garch_model(self) -> dict:
+  def optimize_garch_model(self, optimization_trials) -> dict:
+    """
+    This function is designed to optimize the GARCH model on the returns of the stock.
+    Optuna is used to optimize the parameters of the GARCH model.
+    Inputs:
+      - optimization_trials: int, the number of trials to run
+    Warning: This function is experimental
+    """
     if self.verbose: print("Optimizing GARCH model")
     def objective(trial):
-        p = trial.suggest_int('p', 1, 10)
-        q = trial.suggest_int('q', 1, 10)
-        vol = trial.suggest_categorical('vol', ['GARCH', 'ARCH', 'EGARCH', 'FIGARCH', 'APARCH', 'HARCH'])
+        vol =  trial.suggest_categorical('vol', ['GARCH', 'ARCH', 'EGARCH', 'FIGARCH', 'APARCH', 'HARCH'])
+        p = trial.suggest_int('p', 0, 10)
+        q = trial.suggest_int('q', 0, 10)
         mean = trial.suggest_categorical('mean', ['Constant', 'Zero', 'LS', 'AR', 'ARX', 'HAR', 'HARX', 'constant', 'zero'])
         dist = trial.suggest_categorical('dist', ['normal', 'gaussian', 't', 'studentst', 'skewstudent', 'skewt', 'ged', 'generalized error'])
-        if self.verbose: print(f"Starting trial with parameters {p}, {q}, {vol}, {mean}, {dist}")
-        self.build_garch_model(vol, mean, p, q, dist)
-        res = self.garch_model.fit(disp='off')
-        return res.aic
+        o = trial.suggest_int('o', 0, 10)
+        power = trial.suggest_float('power', 0, 10)
+        hold_back = trial.suggest_int('hold_back', 0, 10)
+        if hold_back == 0: hold_back = None
+        rescale = trial.suggest_categorical('rescale', [True, False, None])
+        if self.verbose: print(f"Optimizing with parameters {vol}, {mean}, {p}, {q}, {dist}, {o}, {power}, {hold_back}, {rescale}")
+        try:
+            self.build_garch_model(vol, mean, p, q, dist, o, power, hold_back, rescale)
+            res = self.garch_model.fit(disp='off')
+            return res.aic
+        except Exception as e:
+            print(f"Error with parameters {p}, {q}, {vol}, {mean}, {dist}, {o}, {power}, {hold_back}, {rescale}: {e}")
+            return float('inf')
+    print("Warning: This function is experimental, and may throw errors in the optimization process. Use at your own risk.")
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=optimization_trials)
     if self.verbose: print("Optimization complete")
     return study.best_params
+    
+  def __repr__(self) -> str:
+    return f"Option of {self.yf_ticker.ticker}\nStrike Price: {self.K}\nRisk-Free Rate: {self.risk_free_rate}\nExpiration Date: {self.date}\nDividend Yield: {self.dividend_yield}\nPrice of the stock: {self.S}\nVolatility: {self.sigma}\nIs Call: {self.is_call}\nIs an american option: {self.american}\n"
+
+
+##ToDo: Implement the american version of implicit and explicit finite difference methods
+##      Implement Monte Carlo simulation
+##      Implement the Black-Scholes model, both for european and american options
