@@ -47,6 +47,7 @@ class Fetcher:
             self.income_statement, self.balance_sheet, self.cashflow = self.get_financial_statements(self.yf_stock)
         else:
             print("Warning, no ticker has been specified. Only get_ticker(), get_risk_free_rate() and get_sp500() methods will work.")    
+    
     def get_ticker(self, company_name:str)->str:
         """
         This function returns the ticker of a company, given the name.
@@ -67,6 +68,7 @@ class Fetcher:
             company_code = data["quotes"][0]["symbol"]
             return company_code
         raise AssertionError("Company may not be listed")
+    
     def get_historical_data(self, symbol:str, timeframe:str)-> Tuple[pd.DataFrame, str]:
         """
         This function returns a PANDAS dataframe about the price of the company and the 
@@ -280,7 +282,6 @@ class Fetcher:
         revenue = self.income_statement.loc['Total Revenue'].iloc[0]
         return self.yf_stock.info['marketCap'] / revenue
 
-
     def get_risk_free_rate(self, horizon:str = '13 weeks') -> float:
         """Returns the risk free rate, given an horizon.
         Accepted inputs are:
@@ -316,3 +317,8 @@ class Fetcher:
         """Returns the growth rate"""
         return self.yf_stock.info['earningsQuarterlyGrowth']
     
+    def __repr__(self) -> str:
+        try:
+            return f"Stock: {self.yf_stock.ticker}\nLast Close Value: {self.df['Close'].iloc[-1]}\nBeta: {self.get_beta_value()}"
+        except:
+            return f"Stock: {self.yf_stock.ticker}\nLast Close Value: {self.df['Close'].iloc[-1]}\nBeta: Not available"
