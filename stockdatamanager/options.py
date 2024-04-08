@@ -7,8 +7,6 @@ Classes:
 - OptionPricing: Main class for option pricing that utilizes different numerical methods and models including GARCH for volatility modeling.
 The design favors flexibility in choosing pricing methods and models, offering tools for both simple and advanced option pricing scenarios.
 """
-from audioop import reverse
-from tracemalloc import start
 from stockdatamanager.customerrors import MethodError
 from .datafetcher import Fetcher
 import pandas as pd
