@@ -9,6 +9,7 @@ The design favors flexibility in choosing pricing methods and models, offering t
 """
 from stockdatamanager.customerrors import MethodError
 from .datafetcher import Fetcher
+from .utils import _SMA, _EMA, _SARIMAX_model
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -1063,11 +1064,14 @@ class OptionPricing(object):
                american: bool,
                risk_free_rate: Union[str, float],
                identification: Union[str, int],
+               risk_free_rate_approximation: str = 'last_observed',
                volatility: float = None,
                use_yfinance_volatility: bool = True,
                optimize_garch: bool = False,
                optimization_rounds: int = 100,
-               verbose: bool = False):
+               verbose: bool = False,
+               risk_free_rate_approximation_parameters: dict = {}
+               ):
     """
     Class to price options using different methods.
     Inputs:
@@ -1076,11 +1080,13 @@ class OptionPricing(object):
     - american: bool, whether the option is American or European
     - risk_free_rate: either a string representing the horizon or a value
     - identification: either a string representing the contract symbol or an integer representing the index of the option within the chain
+    - risk_free_rate_approximation: str, the method to approximate the risk-free rate, can be 'last_observed', 'SMA', 'EMA', 'SARIMAX'
     - volatility: float, the volatility of the underlying asset
     - use_yfinance_volatility: bool, whether to use the volatility from Yahoo Finance if no volatility is provided. If False, a GARCH model will be used
     - optimize_garch: bool, whether to optimize the GARCH model for the volatility
     - optimization_rounds: int, the number of rounds to optimize the GARCH model
     - verbose: bool, whether to print the steps of the process
+    - risk_free_rate_approximation_parameters: dict, the parameters to be passed to the risk-free rate approximation method
     """
     if type(ticker) != str:
       raise ValueError('ticker must be a string')
@@ -1112,7 +1118,59 @@ class OptionPricing(object):
     self.is_call = call
     self.dividend_yield = self.fetcher.get_dividend_yield()
     if type(risk_free_rate) == str:
-      self.risk_free_rate = self.fetcher.get_risk_free_rate(risk_free_rate)['Close'].iloc[-1]
+      self.historical = self.fetcher.get_risk_free_rate(risk_free_rate)['Close']
+      if risk_free_rate_approximation == 'last_observed':
+        self.risk_free_rate = self.historical.iloc[-1]
+      elif risk_free_rate_approximation == 'SMA':
+        if 'window' not in risk_free_rate_approximation_parameters.keys():
+          print("Window not passed, using default value of 20")
+        if 'num_of_steps' not in risk_free_rate_approximation_parameters.keys():
+          print("Number of steps not passed, using default value of 1")
+        window = risk_free_rate_approximation_parameters.get('window', 20)
+        num_of_steps = risk_free_rate_approximation_parameters.get('num_of_steps', 1)
+        self.risk_free_rate = _SMA(self.historical, window).predict_val(num_of_steps)
+      elif risk_free_rate_approximation == 'EMA':
+        if 'window' not in risk_free_rate_approximation_parameters.keys():
+          print("Window not passed, using default value of 20")
+        if 'num_of_steps' not in risk_free_rate_approximation_parameters.keys():
+          print("Number of steps not passed, using default value of 1")
+        window = risk_free_rate_approximation_parameters.get('window', 20)
+        num_of_steps = risk_free_rate_approximation_parameters.get('num_of_steps', 1)
+        self.risk_free_rate = _EMA(self.historical, window).predict_val(num_of_steps)
+      elif risk_free_rate_approximation == 'SARIMAX':
+        if verbose:
+          print("The SARIMAX method accepts the following optional parameters:\n - exog: pd.Series, exogenous variable to use in the model")
+          print("- forecast_steps: int, number of forecast steps")
+          print("- optimize: bool, whether to optimize the hyperparameters")
+          print("- optimization_rounds: int, number of rounds to optimize the hyperparameters")
+          print("- test_size: float, size of the test set")
+          print("- random_state: int, random state for reproducibility")
+          print("- p: int, AR order")
+          print("- d: int, differencing order")
+          print("- q: int, MA order")
+          print("- P: int, seasonal AR order")
+          print("- D: int, seasonal differencing order")
+          print("- Q: int, seasonal MA order")
+          print("- s: int, seasonal period")
+          print("- trend: str, trend parameter")
+          print("- measure_error: bool, whether to measure the error")
+          print("- time_varying_regression: bool, whether to use time varying regression")
+          print("- mle_regression: bool, whether to use MLE regression")
+          print("- simple_differencing: bool, whether to use simple differencing")
+          print("- enforce_stationarity: bool, whether to enforce stationarity")
+          print("- enforce_invertibility: bool, whether to enforce invertibility")
+          print("- hamilton_representation: bool, whether to use Hamilton representation")
+          print("- concentrate_scale: bool, whether to concentrate scale")
+          print("- trend_offset: int, trend offset")
+          print("- use_exact_diffuse: bool, whether to use exact diffuse")
+        if 'forecast_steps' in risk_free_rate_approximation_parameters.keys():
+          steps = risk_free_rate_approximation_parameters['forecast_steps']
+          risk_free_rate_approximation_parameters.pop('forecast_steps')
+        if steps is None or not isinstance(steps, int):
+          steps = 1
+        model = _SARIMAX_model(self.historical, **risk_free_rate_approximation_parameters)
+        self.risk_free_rate = np.mean(model.forecast(steps))
+
     elif type(risk_free_rate) == float or type(risk_free_rate) == int:
       self.risk_free_rate = risk_free_rate
     else:
