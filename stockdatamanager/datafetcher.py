@@ -291,13 +291,21 @@ class Fetcher:
             -30 years
         """
         if horizon == '13 weeks':
-            return yf.Ticker('^IRX').history(period='max')
+            to_ret = yf.Ticker('^IRX').history(period='max')
+            to_ret['Close'] = to_ret['Close']/100
+            return to_ret
         elif horizon == '5 years':
-            return yf.Ticker('^FVX').history(period='max')
+            to_ret = yf.Ticker('^FVX').history(period='max')
+            to_ret['Close'] = to_ret['Close']/100
+            return to_ret
         elif horizon == '10 years':
-            return yf.Ticker('^TNX').history(period='max')
+            to_ret = yf.Ticker('^TNX').history(period='max')
+            to_ret['Close'] = to_ret['Close']/100
+            return to_ret
         elif horizon == '30 years':
-            return yf.Ticker('^TYX').history(period='max')
+            to_ret = yf.Ticker('^TYX').history(period='max')
+            to_ret['Close'] = to_ret['Close']/100
+            return to_ret
         else:
             raise ValueError('Invalid horizon, please choose between "month", "5 years", "10 years" and "30 years"')
 
