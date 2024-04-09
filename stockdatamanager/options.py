@@ -1070,7 +1070,9 @@ class OptionPricing(object):
                optimize_garch: bool = False,
                optimization_rounds: int = 100,
                verbose: bool = False,
-               risk_free_rate_approximation_parameters: dict = {}
+               risk_free_rate_approximation_parameters: dict = {},
+               num_of_days_risk_free_rate: int = 252,
+               num_of_days_volatility: int = 252,
                ):
     """
     Class to price options using different methods.
@@ -1087,6 +1089,8 @@ class OptionPricing(object):
     - optimization_rounds: int, the number of rounds to optimize the GARCH model
     - verbose: bool, whether to print the steps of the process
     - risk_free_rate_approximation_parameters: dict, the parameters to be passed to the risk-free rate approximation method
+    - num_of_days_risk_free_rate: int, the number of days to consider for the risk-free rate approximation
+    - num_of_days_volatility: int, the number of days to consider for the volatility approximation
     """
     if type(ticker) != str:
       raise ValueError('ticker must be a string')
@@ -1118,7 +1122,7 @@ class OptionPricing(object):
     self.is_call = call
     self.dividend_yield = self.fetcher.get_dividend_yield()
     if type(risk_free_rate) == str:
-      self.historical = self.fetcher.get_risk_free_rate(risk_free_rate)['Close']
+      self.historical = self.fetcher.get_risk_free_rate(risk_free_rate)['Close'].tail(num_of_days_risk_free_rate)
       if risk_free_rate_approximation == 'last_observed':
         self.risk_free_rate = self.historical.iloc[-1]
       elif risk_free_rate_approximation == 'SMA':
@@ -1128,7 +1132,8 @@ class OptionPricing(object):
           print("Number of steps not passed, using default value of 1")
         window = risk_free_rate_approximation_parameters.get('window', 20)
         num_of_steps = risk_free_rate_approximation_parameters.get('num_of_steps', 1)
-        self.risk_free_rate = _SMA(self.historical, window).predict_val(num_of_steps)
+        SMA = _SMA(self.historical, window)
+        self.risk_free_rate = SMA.predict_val(num_of_steps)
       elif risk_free_rate_approximation == 'EMA':
         if 'window' not in risk_free_rate_approximation_parameters.keys():
           print("Window not passed, using default value of 20")
@@ -1175,11 +1180,12 @@ class OptionPricing(object):
       self.risk_free_rate = risk_free_rate
     else:
       raise ValueError('risk_free_rate must be either a string representing the horizon or a value')
-    self.r = self.risk_free_rate
+    self.r = self.risk_free_rate * 100
     self.S = self.dataframe['Close'].iloc[-1]
     self.T = (self.date - pd.to_datetime('today')).days / 365
     self.K = self.option['strike']
     self.american = american
+    self.num_of_days_volatility = num_of_days_volatility
     if use_yfinance_volatility:
       self.sigma = self.option['impliedVolatility']
     else:
@@ -1483,6 +1489,7 @@ class OptionPricing(object):
   def build_garch_model(self, vol, mean, p, q, dist, o, power, hold_back, rescale):
     if self.verbose: print("Building GARCH model")
     target_val = self.dataframe['Close'].pct_change().dropna() * 100
+    target_val = target_val.tail(self.num_of_days_volatility)
     self.garch_model = arch.arch_model(target_val, vol = vol, mean = mean, p=p, q=q, dist=dist, o=o, power=power, hold_back=hold_back, rescale=rescale)
     if self.verbose: print("GARCH model built")
 
