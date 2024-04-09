@@ -19,8 +19,10 @@ class _SMA(object):
             raise ValueError("The target contains missing values, please fill them before using this class")
     
     def predict_val(self, num_steps = 1):
-        values = self.target.rolling(window = self.window).mean().shift(-1)
-        return np.mean(values[-num_steps:])
+        rolling_mean = self.target.rolling(window=self.window).mean()
+        final_result = rolling_mean.tail(num_steps)
+        return np.mean(final_result)
+
 
 class _EMA(object):
     def __init__(self, target, window = 5):
@@ -36,8 +38,8 @@ class _EMA(object):
             raise ValueError("The target contains missing values, please fill them before using this class")
     
     def predict_val(self, num_steps = 1):
-        values = self.target.ewm(span = self.window).mean().shift(-1).fillna(0)
-        return np.mean(values[-num_steps:])
+        values = self.target.ewm(span = self.window).mean().tail(num_steps)
+        return np.mean(values)
 
 class _SARIMAX_model(object):
     def __init__(self, target: pd.Series, exog: pd.Series = None, optimize: bool = False, 
