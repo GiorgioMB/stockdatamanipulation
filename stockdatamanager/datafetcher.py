@@ -307,7 +307,7 @@ class Fetcher:
             to_ret['Close'] = to_ret['Close']/100
             return to_ret
         else:
-            raise ValueError('Invalid horizon, please choose between "month", "5 years", "10 years" and "30 years"')
+            raise ValueError('Invalid horizon, please choose between "13 weeks", "5 years", "10 years" and "30 years"')
 
     def get_sp500(self) -> pd.DataFrame:
         """Returns the S&P 500"""
