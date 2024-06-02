@@ -17,13 +17,12 @@ import re
 from typing import Union
 from scipy.stats import norm
 from scipy import linalg
-from scipy.stats import linregress
 import matplotlib.pyplot as plt
 import seaborn as sns
 import arch
 import optuna
 import math
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import sys
 
 class Greeks(object):
@@ -45,12 +44,14 @@ class Greeks(object):
     self.df, self.yf_ticker = self.fetcher.df, self.fetcher.yf_stock
     if type(identification) == str:
      self.option_chain = self.yf_ticker.option_chain().calls if call else self.yf_ticker.option_chain().puts
-     self.option = self.option_chain[self.option_chain['contractSymbol'] == identification]
+     self.option = self.option_chain[self.option_chain['contractSymbol'] == identification].reset_index(drop=True)
+     self.option = self.option.iloc[0]
     elif type(identification) == int:
       self.option = self.yf_ticker.option_chain().calls.iloc[identification] if call else self.yf_ticker.option_chain().puts.iloc[identification]
     else:
       raise ValueError('identification must be either a string or an integer')
     self.verbose = verbose
+    self._id = identification
     self.date = self.calculate_expiration()
     self.call = call
 
@@ -69,7 +70,7 @@ class Greeks(object):
     """Function to calculate the expiration date of the option"""
     if self.verbose:
       print("Calculating expiration date")
-    to_process = self.option['contractSymbol']
+    to_process = self.option['contractSymbol'] if isinstance(self._id, int) else self._id
     date_str = self.from_name_to_datestr(to_process)
     date = pd.to_datetime(date_str)
     return date
@@ -1110,9 +1111,11 @@ class OptionPricing(object):
       raise ValueError('verbose must be a boolean')
     self.fetcher = Fetcher(ticker)
     self.dataframe, self.yf_ticker = self.fetcher.df, self.fetcher.yf_stock
+    self._id = identification
     if type(identification) == str:
       self.option_chain = self.yf_ticker.option_chain().calls if call else self.yf_ticker.option_chain().puts
-      self.option = self.option_chain[self.option_chain['contractSymbol'] == identification]
+      self.option = self.option_chain[self.option_chain['contractSymbol'] == identification].reset_index(drop = True)
+      self.option = self.option.iloc[0]
     elif type(identification) == int:
       self.option = self.yf_ticker.option_chain().calls.iloc[identification] if call else self.yf_ticker.option_chain().puts.iloc[identification]
     else:
@@ -1186,7 +1189,7 @@ class OptionPricing(object):
       self.risk_free_rate = risk_free_rate
     else:
       raise ValueError('risk_free_rate must be either a string representing the horizon or a value')
-    self.r = self.risk_free_rate * 100
+    self.r = self.risk_free_rate
     self.S = self.dataframe['Close'].iloc[-1]
     self.T = (self.date - pd.to_datetime('today')).days / 365
     self.K = self.option['strike']
@@ -1221,36 +1224,10 @@ class OptionPricing(object):
     """Function to calculate the expiration date of the option"""
     if self.verbose:
       print("Calculating expiration date")
-    to_process = self.option['contractSymbol']
+    to_process = self.option['contractSymbol'] if isinstance(self._id, int) else self._id
     date_str = self._from_name_to_datestr(to_process)
     date = pd.to_datetime(date_str)
     return date 
-  
-  def __repr__(self):
-    s = ''
-    s += "Available Methods:\n"
-    s += "- Black-Scholes\n"
-    s += "- Monte Carlo\n"
-    s += "- Binomial Tree\n"
-    s += "- Binomial Lattice Tree\n"
-    s += "- Cox-Ross-Rubinstein\n"
-    s += "- Leisen-Reimer Tree\n"
-    s += "- Trinomial Tree\n"
-    s += "- Trinomial Lattice Tree\n"
-    s += "- Explicit Finite Difference\n"
-    s += "- Implicit Finite Difference\n"
-    s += "- Crank-Nicolson Finite Difference\n"
-    if self.verbose:
-      s += f"Option Pricing for {self.yf_ticker.info['longName']}\n"
-      s += f"Option Type: {'Call' if self.is_call else 'Put'}\n"
-      s += f"American Option: {self.american}\n"
-      s += f"Risk-Free Rate: {self.risk_free_rate}\n"
-      s += f"Volatility: {self.sigma}\n"
-      s += f"Strike Price: {self.K}\n"
-      s += f"Expiration Date: {self.date}\n"
-      s += f"Underlying Asset Price: {self.S}\n"
-      s += f"Dividend Yield: {self.dividend_yield}\n"
-    return s
 
   def calculate_option_price(self, method: str, describe: bool = False, **kwargs) -> float:
     """
@@ -1261,6 +1238,8 @@ class OptionPricing(object):
       - kwargs: additional arguments to be passed to the method
     
     Accepted methods:
+    - Black-Scholes: Black-Scholes Method
+    - Monte Carlo: Monte Carlo Method
     - Binomial Tree Methods: Binomial Tree, Binomial Lattice Tree, Cox-Ross-Rubinstein, Leisen-Reimer Tree
     - Trinomial Tree Methods: Trinomial Tree, Trinomial Lattice Tree
     - Finite Difference Methods: Explicit Finite Difference, Implicit Finite Difference, Crank-Nicolson Finite Difference
