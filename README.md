@@ -1,12 +1,10 @@
 # StockDataManager
-This Python library offers a combination of technical analysis tools and fundamental data retrieval functionalities, designed to support investors, researchers, and enthusiasts in the financial markets. 
-
-This Python library provides a comprehensive suite of tools for both technical and fundamental analysis, along with more advanced options analysis features. Utilizing the yfinance library, it provides easy access to historical stock data, financial statements, and key financial metrics from Yahoo Finance, alongside a suite of technical indicators for market analysis as well as options analysis tools.
+This Python library offers a comprehensive suite of tools for technical and fundamental analysis, along with options analysis capabilities. Utilizing the yfinance library, it facilitates access to historical stock data, financial statements, and key financial metrics from Yahoo Finance. It includes over 30 technical indicators and options analysis tools.
 
 ## Features
-- **Technical Analysis (`IndicatorCalculator` Class)**: Over 30 technical indicators, including Moving Averages, MACD, Bollinger Bands, RSI, Ichimoku Cloud, and more, to dissect stock market trends and volatility.
-- **Fundamental Analysis (`Fetcher` Class)**: Fetch historical stock data, income statements, balance sheets, cash flows, and key financial ratios (e.g., P/E, ROE, current ratio) for fundamental analysis.
-- **Options Analysis** (`Greeks` and `OptionPricing` Classes): Calculate options greeks and simulate option prices using various models. Supports both European and American options.
+- **Technical Analysis (`IndicatorCalculator` Class)**: Offers over 30 technical indicators like Moving Averages, MACD, Bollinger Bands, RSI, Ichimoku Cloud, etc., for analyzing market trends and volatility.
+- **Fundamental Analysis (`Fetcher` Class)**: Retrieve historical stock data, income statements, balance sheets, cash flows, and key financial ratios (e.g., P/E, ROE, current ratio).
+- **Options Analysis (`Greeks` and `OptionPricing` Classes)**: tools to calculate options greeks and simulate option prices using various models, with enhanced methods to estimate risk-free rates and volatility.
 
 ## Installation
 
