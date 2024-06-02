@@ -4,7 +4,7 @@ It allows for calculations of option Greeks and prices either using tree methods
 It supports both European and American options for price calculation. 
 Classes include:
 - Greeks: Calculate option Greeks (Delta, Gamma, Vega, etc.) using the Black-Scholes formula.
-- OptionPricing: Main class for option pricing that utilizes different numerical methods and models. This class now supports GARCH for volatility modeling and has been enhanced to include risk-free rate approximations using SARIMAX, EMA, and SMA. Additionally, volatility approximation can also be performed using an AutoEncoder. 
+- OptionPricing: Main class for option pricing that utilizes different numerical methods and models. This class supports GARCH and AutoEncoder for volatility modeling and risk-free rate approximations using SARIMAX, EMA, and SMA.
 - Helper classes designed for internal use that support the various methods and models implemented.
 """
 import random
