@@ -1,9 +1,15 @@
+#%%
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import numpy as np
 import optuna
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
+import torch
+import torch.nn as nn
+from sklearn.metrics import mean_absolute_percentage_error
+from typing import Union
+
 
 class _SMA(object):
     def __init__(self, target, window = 5):
@@ -305,3 +311,171 @@ class _SARIMAX_model(object):
             - steps: int, number of steps to forecast
         """
         return self.model.forecast(steps = steps)
+
+class _AutoEncoder(torch.nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int, dropout: float, device: torch.device, verbose: bool, test_size = 0.2, random_state = 42):
+        super(_AutoEncoder, self).__init__()
+        self.init_params(input_size, hidden_size, num_layers, dropout, device, verbose, test_size, random_state)
+        self.layers = nn.ModuleList()
+        self.layers.append(nn.Linear(input_size, hidden_size))
+        self.layers.append(nn.Dropout(dropout))
+        for _ in range(num_layers - 1):
+            self.layers.append(nn.Linear(hidden_size, hidden_size))
+            self.layers.append(nn.Dropout(dropout))
+        self.decoder = nn.Linear(hidden_size, input_size)  # output_size matches input_size for reconstruction
+        self.volatility_predictor = nn.Linear(hidden_size, 1)  # Output size is 1 for volatility prediction
+        self.device = device
+        self.verbose = verbose
+        self.to(device)
+
+    def init_params(self, input_size, hidden_size, num_layers, dropout, device, verbose, test_size, random_state):
+        if not isinstance(input_size, int):
+            raise ValueError("The input_size parameter must be an integer")
+        if not isinstance(hidden_size, int):
+            raise ValueError("The hidden_size parameter must be an integer")
+        if not isinstance(device, torch.device):
+            raise ValueError("The device parameter must be a torch device")
+        if not isinstance(verbose, bool):
+            raise ValueError("The verbose parameter must be a boolean")
+        if not isinstance(test_size, float) or test_size > 1 or test_size < 0:
+            raise ValueError("The test_size parameter must be a float between 0 and 1")
+        if not isinstance(random_state, int):
+            raise ValueError("The random_state parameter must be an integer")
+        if not isinstance(num_layers, int):
+            raise ValueError("The num_layers parameter must be an integer")
+        if not isinstance(dropout, float) or dropout > 1 or dropout < 0:
+            raise ValueError("The dropout parameter must be a float between 0 and 1")
+        self.test_size = test_size
+        self.random_state = random_state
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+    def forward(self, x):
+        x = x.to(self.device)
+        for layer in self.layers:
+            x = torch.relu(layer(x))
+        decoded = torch.relu(self.decoder(x))
+        volatility = self.volatility_predictor(x)  # Linear output for volatility
+        return decoded, volatility
+    
+    def predict(self, x):
+        """
+        Method to predict values
+        """
+        self.eval()
+        with torch.no_grad():
+            return self.forward(x)
+    
+    def validate_data(self, X, y):
+        """
+        Checks if the input data is a torch tensor, if not converts it to a torch tensor and moves it to the device
+        """
+        if self.verbose:
+            print("Validating data")
+        if not isinstance(X, torch.Tensor):
+            try:
+                if isinstance(X, np.ndarray):
+                    X = torch.from_numpy(X).float()
+                elif isinstance(X, (pd.DataFrame, pd.Series)):
+                    X = torch.from_numpy(X.values).float()
+                else:
+                    raise ValueError("The input data type is not supported")
+            except Exception as e:
+                raise ValueError("The input data type is not supported, error: ", e)
+        if not isinstance(y, torch.Tensor):
+            try:
+                if isinstance(y, np.ndarray):
+                    y = torch.from_numpy(y).float()
+                elif isinstance(y, (pd.DataFrame, pd.Series)):
+                    y = torch.from_numpy(y.values).float()
+                else:
+                    raise ValueError("The input data type is not supported")
+            except Exception as e:
+                raise ValueError("The input data type is not supported, error: ", e)
+        return X.to(self.device), y.to(self.device)
+    
+    def window_data(self, X, window_size):
+        """
+        Window the data size to be [batch_size, window_size, 1]
+        """
+        if X.shape[0] < window_size:
+            raise ValueError("The window size is larger than the input data size")
+        if self.verbose:
+            print("Windowing data")
+        X = X.unfold(0, window_size, 1)
+        return X
+    
+    def balanced_criterion(self, output, target, alpha = 0.5):
+        """
+        Method to calculate the balanced criterion
+        formula: alpha * MSE(reconstruction) + (1 - alpha) * MSE(volatility)
+        lower alpha means higher importance to the volatility prediction loss
+        """
+        output = list(output)
+        target = list(target)
+        output[0], target[0] = output[0].squeeze(-1), target[0]
+        output[1], target[1] = output[1].squeeze(-1), target[1]
+
+        criterion = nn.MSELoss()
+        loss1 = criterion(output[0], target[0])
+        loss2 = criterion(output[1], target[1])
+        return alpha * loss1 + (1 - alpha) * loss2
+    
+    def fit(self, X: Union[torch.Tensor, pd.Series, pd.DataFrame, np.ndarray], 
+            y: Union[torch.Tensor, pd.Series, pd.DataFrame, np.ndarray],
+            learning_rate: float = 0.001, 
+            epochs: int = 10, optimizer: torch.optim.Optimizer = None, 
+            criterion: callable = None, batch_size: int = 32, 
+            metrics: callable = mean_absolute_percentage_error, alpha: float = 0.5):
+        """
+        Method to train the model
+        Inputs:
+            - X: Union[torch.Tensor, pd.Series, pd.DataFrame, np.ndarray], input data
+            - y: Union[torch.Tensor, pd.Series, pd.DataFrame, np.ndarray], target data
+            - epochs: int, number of epochs, default is 10
+            - optimizer: torch.nn.optim.Optimizer, optimizer to use, default is Adam
+            - criterion: callable, loss function, default is balanced_criterion (alpha * MSE(reconstruction) + (1 - alpha) * MSE(volatility))
+            - batch_size: int, batch size
+            - metrics: callable, metrics function
+            - alpha: float, alpha parameter for the balanced criterion
+        """
+        if optimizer is None:
+            optimizer = torch.optim.Adam(self.parameters(), lr = learning_rate)
+        if criterion is None:
+            criterion = self.balanced_criterion
+        X, y = self.validate_data(X, y)
+        X = self.window_data(X, self.input_size)
+        y = y[self.input_size - 1:]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = self.test_size, random_state= self.random_state)
+        train_data = torch.utils.data.TensorDataset(X_train, y_train)
+        test_data = torch.utils.data.TensorDataset(X_test, y_test)
+        train_loader = torch.utils.data.DataLoader(train_data, batch_size = batch_size, shuffle = True)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size = batch_size, shuffle = True)
+        for epoch in range(epochs):
+            self.train()
+            total_loss = 0
+            for i, (data, target) in enumerate(train_loader):
+                optimizer.zero_grad()
+                output, volatility = self.forward(data)
+                loss = criterion((output, volatility), (data, target), alpha)
+                total_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+            if self.verbose:
+                print(f"Epoch {epoch + 1}, loss: {total_loss / len(train_loader)}")
+            predicted = []
+            true = []
+            val_loss = 0
+            for i, (data, target) in enumerate(test_loader):
+                output, volatility = self.predict(data)
+                loss = criterion((output, volatility), (data, target), alpha)
+                val_loss += loss.item()
+                predicted.append(volatility)
+                true.append(target)
+        
+            predicted = torch.cat(predicted).squeeze(-1)
+            true = torch.cat(true)
+            if self.verbose:
+                print(f"Validation loss: {val_loss / len(test_loader)}")
+                print(f"Metrics: {metrics(true, predicted)}")
+        return self
