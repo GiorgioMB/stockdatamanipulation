@@ -392,7 +392,7 @@ class Option(object):
   @property
   def dt(self) -> float:
     """ Single time step, in years """
-    return self.T / float(self.N)
+    return abs(self.T / float(self.N))
 
   @property
   def df(self) -> float:
@@ -1145,33 +1145,39 @@ class OptionPricing(object):
       elif risk_free_rate_approximation == 'SARIMAX':
         if verbose:
           print("The SARIMAX method accepts the following optional parameters:\n - exog: pd.Series, exogenous variable to use in the model")
-          print("- forecast_steps: int, number of forecast steps")
+          print("- forecast_steps: int, number of steps to forecast")
+          print(" - exog: pd.Series, exogenous variable to use in the model")
           print("- optimize: bool, whether to optimize the hyperparameters")
           print("- optimization_rounds: int, number of rounds to optimize the hyperparameters")
           print("- test_size: float, size of the test set")
           print("- random_state: int, random state for reproducibility")
-          print("- p: int, AR order")
-          print("- d: int, differencing order")
-          print("- q: int, MA order")
-          print("- P: int, seasonal AR order")
-          print("- D: int, seasonal differencing order")
-          print("- Q: int, seasonal MA order")
-          print("- s: int, seasonal period")
-          print("- trend: str, trend parameter")
+          print("- verbose: bool, whether to print the steps of the process")
+          print("- p: int, the autoregressive order")
+          print("- d: int, the differencing order")
+          print("- q: int, the moving average order")
+          print("- P: int, the seasonal autoregressive order")
+          print("- D: int, the seasonal differencing order")
+          print("- Q: int, the seasonal moving average order")
+          print("- s: int, the number of periods in a season")
+          print("- trend: str, the trend in the model")
           print("- measure_error: bool, whether to measure the error")
-          print("- time_varying_regression: bool, whether to use time varying regression")
-          print("- mle_regression: bool, whether to use MLE regression")
+          print("- time_varying_regression: bool, whether to use time-varying regression")
+          print("- mle_regression: bool, whether to use maximum likelihood estimation for regression")
           print("- simple_differencing: bool, whether to use simple differencing")
           print("- enforce_stationarity: bool, whether to enforce stationarity")
           print("- enforce_invertibility: bool, whether to enforce invertibility")
-          print("- hamilton_representation: bool, whether to use Hamilton representation")
-          print("- concentrate_scale: bool, whether to concentrate scale")
-          print("- trend_offset: int, trend offset")
-          print("- use_exact_diffuse: bool, whether to use exact diffuse")
+          print("- hamilton_representation: bool, whether to use the Hamilton representation")
+          print("- concentrate_scale: bool, whether to concentrate the scale")
+          print("- trend_offset: bool, whether to use a trend offset")
+          print("- use_exact_diffuse_initialization: bool, whether to use exact diffuse initialization")
+        steps = None
         if 'forecast_steps' in risk_free_rate_approximation_parameters.keys():
           steps = risk_free_rate_approximation_parameters['forecast_steps']
           risk_free_rate_approximation_parameters.pop('forecast_steps')
-        if steps is None or not isinstance(steps, int):
+        if steps is None:
+          steps = 1
+        elif not isinstance(steps, int):
+          print("Warning: forecast_steps must be an integer, using default value of 1")
           steps = 1
         model = _SARIMAX_model(self.historical, **risk_free_rate_approximation_parameters)
         self.risk_free_rate = np.mean(model.forecast(steps))
@@ -1220,6 +1226,32 @@ class OptionPricing(object):
     date = pd.to_datetime(date_str)
     return date 
   
+  def __repr__(self):
+    s = ''
+    s += "Available Methods:\n"
+    s += "- Black-Scholes\n"
+    s += "- Monte Carlo\n"
+    s += "- Binomial Tree\n"
+    s += "- Binomial Lattice Tree\n"
+    s += "- Cox-Ross-Rubinstein\n"
+    s += "- Leisen-Reimer Tree\n"
+    s += "- Trinomial Tree\n"
+    s += "- Trinomial Lattice Tree\n"
+    s += "- Explicit Finite Difference\n"
+    s += "- Implicit Finite Difference\n"
+    s += "- Crank-Nicolson Finite Difference\n"
+    if self.verbose:
+      s += f"Option Pricing for {self.yf_ticker.info['longName']}\n"
+      s += f"Option Type: {'Call' if self.is_call else 'Put'}\n"
+      s += f"American Option: {self.american}\n"
+      s += f"Risk-Free Rate: {self.risk_free_rate}\n"
+      s += f"Volatility: {self.sigma}\n"
+      s += f"Strike Price: {self.K}\n"
+      s += f"Expiration Date: {self.date}\n"
+      s += f"Underlying Asset Price: {self.S}\n"
+      s += f"Dividend Yield: {self.dividend_yield}\n"
+    return s
+
   def calculate_option_price(self, method: str, describe: bool = False, **kwargs) -> float:
     """
     Main wrapper function to calculate the price of an option using the specified method.
@@ -1234,6 +1266,7 @@ class OptionPricing(object):
     - Finite Difference Methods: Explicit Finite Difference, Implicit Finite Difference, Crank-Nicolson Finite Difference
     """
     method = method.replace(' ', '').lower()
+
     if method in ('blackscholes', 'black-scholes', 'bs', 'black_scholes'):
       if self.american:
         raise MethodError("The Black-Scholes method is only available for European options")
