@@ -1,11 +1,11 @@
 """
 This file contains classes and methods for option pricing and analysis, utilizing various financial models and numerical methods. 
 It allows for calculations of option Greeks and prices either using tree methods or finite difference methods among others. 
-It supports both European and American options for price calculation.
-Classes:
+It supports both European and American options for price calculation. 
+Classes include:
 - Greeks: Calculate option Greeks (Delta, Gamma, Vega, etc.) using the Black-Scholes formula.
-- OptionPricing: Main class for option pricing that utilizes different numerical methods and models including GARCH for volatility modeling.
-The design favors flexibility in choosing pricing methods and models, offering tools for both simple and advanced option pricing scenarios.
+- OptionPricing: Main class for option pricing that utilizes different numerical methods and models. This class now supports GARCH for volatility modeling and has been enhanced to include risk-free rate approximations using SARIMAX, EMA, and SMA. Additionally, volatility approximation can also be performed using an AutoEncoder. 
+- Helper classes designed for internal use that support the various methods and models implemented.
 """
 import random
 from stockdatamanager.customerrors import MethodError
@@ -27,7 +27,7 @@ import math
 from abc import abstractmethod
 import sys
 import torch
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_percentage_error
 
 class Greeks(object):
   """
@@ -1204,11 +1204,16 @@ class OptionPricing(object):
         sigma = res.conditional_volatility
         self.sigma = sigma[-1]
       else:
+        X = self.dataframe['Close'].pct_change().dropna()
+        y = self.dataframe.loc[X.index, 'Volatility'].dropna()
+        X = X.loc[y.index]
         if num_of_days_volatility >= len(self.dataframe) - 1:
           raise ValueError("Number of days for volatility must be less than the length of the dataframe minus 1, as num_of_days_volatility observations are used for testing and thus not used in training")
         if optimize_autoencoder:
           autoencoder_params = self.optimize_autoencoder_model(optimization_rounds)
           self.build_autoencoder_model(**autoencoder_params)
+          _sarimax = _SARIMAX_model(X, optimize = True)
+          to_predict = _sarimax.forecast(num_of_days_volatility)
         else:
           if verbose:
             print("The Autoencoder method accepts the following optional parameters:\n - input_size: int, the size of the input layer")
@@ -1231,14 +1236,13 @@ class OptionPricing(object):
                                       'test_size': 0.2,
                                       'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu')}
           self.build_autoencoder_model(**autoencoder_parameters)
-        X = self.dataframe['Close'].pct_change().dropna()
-        y = self.dataframe.loc[X.index, 'Volatility'].dropna()
-        X = X.loc[y.index]
-        X_test = X.iloc[-self.num_of_days_volatility:]
-        X_test, _ = self.autoencoder_model.validate_data(X_test, X_test)
+          _sarimax = _SARIMAX_model(X)
+          to_predict = _sarimax.forecast(num_of_days_volatility)
+        X_test, _ = self.autoencoder_model.validate_data(to_predict, to_predict)
         X_test = self.autoencoder_model.window_data(X_test, self.autoencoder_model.input_size)
-        predicted_values = self.autoencoder_model.predict(X_test)[1].to('cpu').detach().numpy().flatten()
-        self.sigma = np.mean(predicted_values)
+        predicted_values = self.autoencoder_model.predict(X_test)[1]
+        print(predicted_values.shape)
+        self.sigma = torch.mean(predicted_values).item()
     if volatility is not None:
       self.sigma = volatility
 
@@ -1669,13 +1673,13 @@ class OptionPricing(object):
       try:
         self.build_autoencoder_model(input_size, hidden_size, num_layers, dropout, learning_rate, epochs, batch_size, device, test_size)
         if self.verbose: print("Model built")
-        X_test, y_test = self.autoencoder_model.validate_data(X_test, y_test)
-        y_test = y_test[self.autoencoder_model.input_size-1:]
-        X_test = self.autoencoder_model.window_data(X_test, self.autoencoder_model.input_size)
-        predicted_values = self.autoencoder_model.predict(X_test)[1].to('cpu').detach().numpy().flatten()
+        iteration_X, iteration_y = self.autoencoder_model.validate_data(X_test, y_test)
+        iteration_y = iteration_y[self.autoencoder_model.input_size-1:]
+        iteration_X = self.autoencoder_model.window_data(iteration_X, self.autoencoder_model.input_size)
+        predicted_values = self.autoencoder_model.predict(iteration_X)[1]
         if self.verbose: print("Predicted values")
-        mse = mean_squared_error(predicted_values, y_test)
-        return mse
+        mape = mean_absolute_percentage_error(predicted_values, iteration_y)
+        return mape
       except Exception as e:
         print(f"Error with parameters {input_size}, {hidden_size}, {num_layers}, {dropout}, {learning_rate}, {epochs}, {batch_size}, {test_size}: {e}")
         return float('inf')
