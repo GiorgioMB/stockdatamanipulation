@@ -7,16 +7,18 @@ Classes:
 - OptionPricing: Main class for option pricing that utilizes different numerical methods and models including GARCH for volatility modeling.
 The design favors flexibility in choosing pricing methods and models, offering tools for both simple and advanced option pricing scenarios.
 """
+import random
 from stockdatamanager.customerrors import MethodError
+from sympy import use
 from .datafetcher import Fetcher
-from .utils import _SMA, _EMA, _SARIMAX_model
+from .utils import _SMA, _EMA, _SARIMAX_model, _AutoEncoder
 import pandas as pd
 import numpy as np
 import yfinance as yf
 import re
 from typing import Union
 from scipy.stats import norm
-from scipy import linalg
+from scipy import linalg, optimize
 import matplotlib.pyplot as plt
 import seaborn as sns
 import arch
@@ -24,6 +26,8 @@ import optuna
 import math
 from abc import abstractmethod
 import sys
+import torch
+from sklearn.metrics import mean_squared_error
 
 class Greeks(object):
   """
@@ -1068,12 +1072,17 @@ class OptionPricing(object):
                risk_free_rate_approximation: str = 'last_observed',
                volatility: float = None,
                use_yfinance_volatility: bool = True,
+               use_garch: bool = False,
+               use_autoencoder: bool = False,
                optimize_garch: bool = False,
+               optimize_autoencoder: bool = False,
                optimization_rounds: int = 100,
                verbose: bool = False,
                risk_free_rate_approximation_parameters: dict = {},
+               autoencoder_parameters: dict = {},
                num_of_days_risk_free_rate: int = 252,
                num_of_days_volatility: int = 252,
+               random_state: int = 42,
                ):
     """
     Class to price options using different methods.
@@ -1085,46 +1094,34 @@ class OptionPricing(object):
     - identification: either a string representing the contract symbol or an integer representing the index of the option within the chain
     - risk_free_rate_approximation: str, the method to approximate the risk-free rate, can be 'last_observed', 'SMA', 'EMA', 'SARIMAX'
     - volatility: float, the volatility of the underlying asset
-    - use_yfinance_volatility: bool, whether to use the volatility from Yahoo Finance if no volatility is provided. If False, a GARCH model will be used
+    - use_yfinance_volatility: bool, whether to use the volatility from Yahoo Finance if no volatility is provided
+    - use_garch: bool, whether to use the GARCH model to estimate the volatility
+    - use_autoencoder: bool, whether to use the autoencoder model to estimate the volatility
     - optimize_garch: bool, whether to optimize the GARCH model for the volatility
     - optimization_rounds: int, the number of rounds to optimize the GARCH model
     - verbose: bool, whether to print the steps of the process
     - risk_free_rate_approximation_parameters: dict, the parameters to be passed to the risk-free rate approximation method
+    - autoencoder_parameters: dict, the parameters to be passed to the autoencoder model
     - num_of_days_risk_free_rate: int, the number of days to consider for the risk-free rate approximation
     - num_of_days_volatility: int, the number of days to consider for the volatility approximation
+    - random_state: int, the random state for reproducibility
     """
-    if type(ticker) != str:
-      raise ValueError('ticker must be a string')
-    if type(call) != bool:
-      raise ValueError('call must be a boolean')
-    if type(american) != bool:
-      raise ValueError('american must be a boolean')
-    if (type(volatility) != float) and (volatility is not None) and (type(volatility) != int):
-      raise ValueError('volatility must be a number')
-    if type(use_yfinance_volatility) != bool:
-      raise ValueError('use_yfinance_volatility must be a boolean')
-    if type(optimize_garch) != bool:
-      raise ValueError('optimize_garch must be a boolean')
-    if type(optimization_rounds) != int:
-      raise ValueError('optimization_rounds must be an integer')
-    if type(verbose) != bool:
-      raise ValueError('verbose must be a boolean')
+    self._assertions(ticker, call, american, risk_free_rate, identification, risk_free_rate_approximation, volatility, use_yfinance_volatility, optimize_garch, optimization_rounds, verbose, risk_free_rate_approximation_parameters, num_of_days_risk_free_rate, num_of_days_volatility, use_garch, use_autoencoder, optimize_autoencoder, autoencoder_parameters, random_state)
     self.fetcher = Fetcher(ticker)
+    self.random_state = random_state
     self.dataframe, self.yf_ticker = self.fetcher.df, self.fetcher.yf_stock
     self._id = identification
-    if type(identification) == str:
+    if isinstance(identification, str):
       self.option_chain = self.yf_ticker.option_chain().calls if call else self.yf_ticker.option_chain().puts
       self.option = self.option_chain[self.option_chain['contractSymbol'] == identification].reset_index(drop = True)
       self.option = self.option.iloc[0]
-    elif type(identification) == int:
+    elif isinstance(identification, int):
       self.option = self.yf_ticker.option_chain().calls.iloc[identification] if call else self.yf_ticker.option_chain().puts.iloc[identification]
-    else:
-      raise ValueError('identification must be either a string or an integer')
     self.verbose = verbose
     self.date = self._calculate_expiration()
     self.is_call = call
     self.dividend_yield = self.fetcher.get_dividend_yield()
-    if type(risk_free_rate) == str:
+    if isinstance(risk_free_rate, str):
       self.historical = self.fetcher.get_risk_free_rate(risk_free_rate)['Close'].tail(num_of_days_risk_free_rate)
       if risk_free_rate_approximation == 'last_observed':
         self.risk_free_rate = self.historical.iloc[-1]
@@ -1184,31 +1181,121 @@ class OptionPricing(object):
           steps = 1
         model = _SARIMAX_model(self.historical, **risk_free_rate_approximation_parameters)
         self.risk_free_rate = np.mean(model.forecast(steps))
-
-    elif type(risk_free_rate) == float or type(risk_free_rate) == int:
+    elif isinstance(risk_free_rate, (float, int)):
       self.risk_free_rate = risk_free_rate
-    else:
-      raise ValueError('risk_free_rate must be either a string representing the horizon or a value')
     self.r = self.risk_free_rate
     self.S = self.dataframe['Close'].iloc[-1]
     self.T = (self.date - pd.to_datetime('today')).days / 365
     self.K = self.option['strike']
     self.american = american
     self.num_of_days_volatility = num_of_days_volatility
+    if num_of_days_volatility >= len(self.dataframe): 
+      raise ValueError("Number of days for volatility must be less than the length of the dataframe")
     if use_yfinance_volatility:
       self.sigma = self.option['impliedVolatility']
-    else:
-      if optimize_garch:
-        garch_params = self.optimize_garch_model(optimization_rounds)
-        self.build_garch_model(**garch_params)
+    elif use_autoencoder or use_garch:
+      if use_garch:
+        if optimize_garch:
+          garch_params = self.optimize_garch_model(optimization_rounds)
+          self.build_garch_model(**garch_params)
+        else:
+          self.build_garch_model('GARCH', 'Constant', 1, 1, 'normal', 0, 2, None, None) 
+        res = self.garch_model.fit(disp='off')
+        sigma = res.conditional_volatility
+        self.sigma = sigma[-1]
       else:
-        self.build_garch_model('GARCH', 'Constant', 1, 1, 'normal', 0, 2, None, None) 
-      res = self.garch_model.fit(disp='off')
-      sigma = res.conditional_volatility
-      self.sigma = sigma[-1]
+        if num_of_days_volatility >= len(self.dataframe) - 1:
+          raise ValueError("Number of days for volatility must be less than the length of the dataframe minus 1, as num_of_days_volatility observations are used for testing and thus not used in training")
+        if optimize_autoencoder:
+          autoencoder_params = self.optimize_autoencoder_model(optimization_rounds)
+          self.build_autoencoder_model(**autoencoder_params)
+        else:
+          if len(autoencoder_parameters) == 0:
+            autoencoder_parameters = {'input_size': 10, 
+                                      'hidden_size': 5,
+                                      'num_layers': 3,
+                                      'epochs': 10, 
+                                      'batch_size': 32, 
+                                      'learning_rate': 1e-3,
+                                      'dropout': 0.2,
+                                      'test_size': 0.2,
+                                      'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu')}
+          self.build_autoencoder_model(**autoencoder_parameters)
+        X = self.dataframe['Close'].pct_change().dropna()
+        y = self.dataframe.loc[X.index, 'Volatility'].dropna()
+        X = X.loc[y.index]
+        X_test = X.iloc[-self.num_of_days_volatility:]
+        X_test, _ = self.autoencoder_model.validate_data(X_test, X_test)
+        X_test = self.autoencoder_model.window_data(X_test, self.autoencoder_model.input_size)
+        predicted_values = self.autoencoder_model.predict(X_test)[1].to('cpu').detach().numpy().flatten()
+        self.sigma = np.mean(predicted_values)
     if volatility is not None:
       self.sigma = volatility
 
+  def _assertions(self, ticker, call, american, risk_free_rate, identification, risk_free_rate_approximation, volatility, use_yfinance_volatility, optimize_garch, optimization_rounds, verbose, risk_free_rate_approximation_parameters, num_of_days_risk_free_rate, num_of_days_volatility, use_garch, use_autoencoder, optimize_autoencoder, autoencoder_parameters, random_state):
+    if not isinstance(ticker, str):
+      raise ValueError("Ticker must be a string")
+    if not isinstance(call, bool):
+      raise ValueError("Call must be a boolean")
+    if not isinstance(american, bool):
+      raise ValueError("American must be a boolean")
+    if not isinstance(risk_free_rate, (str, float)):
+      raise ValueError("Risk-Free Rate must be a string or a float")
+    if not isinstance(identification, (str, int)):
+      raise ValueError("Identification must be a string or an integer")
+    if not isinstance(volatility, (float, int)) and volatility is not None:
+      raise ValueError("Volatility must be a number")
+    if not isinstance(use_yfinance_volatility, bool):
+      raise ValueError("Use Yahoo Finance Volatility must be a boolean")
+    if not isinstance(optimize_garch, bool):
+      raise ValueError("Optimize GARCH must be a boolean")
+    if not isinstance(optimization_rounds, int):
+      raise ValueError("Optimization Rounds must be an integer")
+    if optimization_rounds < 1:
+      raise ValueError("Optimization Rounds must be greater than 0")
+    if not isinstance(verbose, bool):
+      raise ValueError("Verbose must be a boolean")
+    if not isinstance(risk_free_rate_approximation_parameters, dict):
+      raise ValueError("Risk-Free Rate Approximation Parameters must be a dictionary")
+    if not isinstance(num_of_days_risk_free_rate, int):
+      raise ValueError("Number of Days Risk-Free Rate must be an integer")
+    if not isinstance(num_of_days_volatility, int):
+      raise ValueError("Number of Days Volatility must be an integer")
+    if risk_free_rate_approximation not in ('last_observed', 'SMA', 'EMA', 'SARIMAX'):
+      raise ValueError("Risk-Free Rate Approximation must be one of 'last_observed', 'SMA', 'EMA', 'SARIMAX'")
+    if not isinstance(use_garch, bool):
+      raise ValueError("Use GARCH must be a boolean")
+    if not isinstance(use_autoencoder, bool):
+      raise ValueError("Use Autoencoder must be a boolean")
+    if use_garch and use_autoencoder:
+      raise ValueError("Only one of GARCH and Autoencoder can be used")
+    if (not use_garch) and (not use_autoencoder) and (not use_yfinance_volatility) and (volatility is None):
+      raise ValueError("At least one method must be used to estimate the volatility")
+    if (use_garch or use_autoencoder or use_yfinance_volatility) and (volatility is not None):
+      print("Warning: Both a volatility and a method to estimate the volatility have been passed, the passed volatility will be used")
+    if not isinstance(optimize_autoencoder, bool):
+      raise ValueError("Optimize Autoencoder must be a boolean")
+    if not isinstance(autoencoder_parameters, dict):
+      raise ValueError("Autoencoder Parameters must be a dictionary")
+    if not isinstance(random_state, int):
+      raise ValueError("Random State must be an integer")
+    if random_state < 0:
+      raise ValueError("Random State must be greater than 0")
+    if len(autoencoder_parameters) > 0 and optimize_autoencoder:
+      print("Warning: Autoencoder parameters have been passed, but the optimization flag is set to True, the parameters will be ignored")
+    if len(risk_free_rate_approximation_parameters) > 0 and risk_free_rate_approximation == 'last_observed':
+      print("Warning: Risk-Free Rate Approximation parameters have been passed, but the method is set to last_observed, the parameters will be ignored")
+    if optimize_garch and not use_garch:
+      print("Warning: Optimize GARCH is set to True, but GARCH is not being used, the optimization will not be performed")
+    if optimize_autoencoder and not use_autoencoder:
+      print("Warning: Optimize Autoencoder is set to True, but Autoencoder is not being used, the optimization will not be performed")
+    if num_of_days_volatility < 1:
+      raise ValueError("Number of Days Volatility must be greater than 0")
+    if (use_autoencoder or use_garch) and use_yfinance_volatility:
+      print("Warning: Both Yahoo Finance Volatility and another method to estimate the volatility have been passed, the Yahoo Finance Volatility will be used")
+    if verbose:
+      print("All assertions passed")
+    
   def _from_name_to_datestr(self, s: str) -> str:
     """Helper function to convert the contract symbol to a date string"""
     if self.verbose:
@@ -1228,6 +1315,32 @@ class OptionPricing(object):
     date_str = self._from_name_to_datestr(to_process)
     date = pd.to_datetime(date_str)
     return date 
+  
+  def __repr__(self):
+    s = ''
+    s += "Available Methods:\n"
+    s += "- Black-Scholes\n"
+    s += "- Monte Carlo\n"
+    s += "- Binomial Tree\n"
+    s += "- Binomial Lattice Tree\n"
+    s += "- Cox-Ross-Rubinstein\n"
+    s += "- Leisen-Reimer Tree\n"
+    s += "- Trinomial Tree\n"
+    s += "- Trinomial Lattice Tree\n"
+    s += "- Explicit Finite Difference\n"
+    s += "- Implicit Finite Difference\n"
+    s += "- Crank-Nicolson Finite Difference\n"
+    if self.verbose:
+      s += f"Option Pricing for {self.yf_ticker.info['longName']}\n"
+      s += f"Option Type: {'Call' if self.is_call else 'Put'}\n"
+      s += f"American Option: {self.american}\n"
+      s += f"Risk-Free Rate: {self.risk_free_rate}\n"
+      s += f"Volatility: {self.sigma}\n"
+      s += f"Strike Price: {self.K}\n"
+      s += f"Expiration Date: {self.date}\n"
+      s += f"Underlying Asset Price: {self.S}\n"
+      s += f"Dividend Yield: {self.dividend_yield}\n"
+    print(s)
 
   def calculate_option_price(self, method: str, describe: bool = False, **kwargs) -> float:
     """
@@ -1539,5 +1652,54 @@ class OptionPricing(object):
     if self.verbose: print("Optimization complete")
     return study.best_params
   
+  def build_autoencoder_model(self, input_size, hidden_size, num_layers, dropout, learning_rate, epochs, batch_size, device, test_size):
+    if self.verbose: print("Building Autoencoder model")
+    X = self.dataframe['Close'].pct_change().dropna()
+    y = self.dataframe.loc[X.index, 'Volatility'].dropna()
+    X = X.loc[y.index]
+    X_train= X.iloc[:-self.num_of_days_volatility]
+    y_train = y.iloc[:-self.num_of_days_volatility]
+    model = _AutoEncoder(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=dropout, test_size = test_size, verbose=self.verbose, device=device, random_state = self.random_state)
+    model = model.fit(X_train, y_train, learning_rate=learning_rate, epochs=epochs, batch_size=batch_size)
+    self.autoencoder_model = model
+
+  def optimize_autoencoder_model(self, optimization_trials) -> dict:
+    X = self.dataframe['Close'].pct_change().dropna()
+    y = self.dataframe.loc[X.index, 'Volatility'].dropna()
+    X = X.loc[y.index]
+    X_test = X.iloc[-self.num_of_days_volatility:]
+    y_test = y.iloc[-self.num_of_days_volatility:]
+    if self.verbose: print(X_test.shape, y_test.shape)
+    def objective(trial):
+      nonlocal X_test, y_test
+      input_size = trial.suggest_int('input_size', 1, 100)
+      hidden_size = trial.suggest_int('hidden_size', 1, input_size)
+      num_layers = trial.suggest_int('num_layers', 1, 10)
+      dropout = trial.suggest_float('dropout', 0, 1)
+      learning_rate = trial.suggest_float('learning_rate', 1e-6, 1e-1)
+      epochs = trial.suggest_int('epochs', 1, 50)
+      batch_size = trial.suggest_int('batch_size', 1, 100)
+      device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+      test_size = trial.suggest_float('test_size', 0.1, 0.5)
+      if self.verbose: print(f"Optimizing with parameters:\n- input: {input_size},\n- hidden: {hidden_size},\n- layers: {num_layers},\n- dropout: {dropout},\n- learning rate: {learning_rate},\n- epochs: {epochs},\n- batch size:{batch_size},\n- test size:{test_size}")
+      try:
+        self.build_autoencoder_model(input_size, hidden_size, num_layers, dropout, learning_rate, epochs, batch_size, device, test_size)
+        if self.verbose: print("Model built")
+        X_test, y_test = self.autoencoder_model.validate_data(X_test, y_test)
+        y_test = y_test[self.autoencoder_model.input_size-1:]
+        X_test = self.autoencoder_model.window_data(X_test, self.autoencoder_model.input_size)
+        predicted_values = self.autoencoder_model.predict(X_test)[1].to('cpu').detach().numpy().flatten()
+        if self.verbose: print("Predicted values")
+        mse = mean_squared_error(predicted_values, y_test)
+        return mse
+      except Exception as e:
+        print(f"Error with parameters {input_size}, {hidden_size}, {num_layers}, {dropout}, {learning_rate}, {epochs}, {batch_size}, {test_size}: {e}")
+        return float('inf')
+    if self.verbose: print("Warning: This function is experimental, and may throw errors in the optimization process. Use at your own risk.")
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=optimization_trials)
+    if self.verbose: print("Optimization complete")
+    return study.best_params
+
   def __repr__(self) -> str:
     return f"Option of {self.yf_ticker.ticker}\nStrike Price: {self.K}\nRisk-Free Rate: {self.risk_free_rate}\nExpiration Date: {self.date}\nDividend Yield: {self.dividend_yield}\nPrice of the stock: {self.S}\nVolatility: {self.sigma}\nIs Call: {self.is_call}\nIs an american option: {self.american}\n"
