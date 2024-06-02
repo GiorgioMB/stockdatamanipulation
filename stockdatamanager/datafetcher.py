@@ -85,7 +85,7 @@ class Fetcher:
                 return None
             stock = yf.Ticker(stock_symbol)
             historical_data = stock.history(period=timeframe)
-            historical_data["Volatility"] = historical_data["Close"].rolling(window=30).std()
+            historical_data["Volatility"] = historical_data["Close"].rolling(window=252).std()
             historical_data = historical_data.dropna()
             return historical_data, stock
         except RequestException as e:     
