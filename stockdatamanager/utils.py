@@ -1,3 +1,6 @@
+"""
+This module contains utility classes used in the OptionPricing class
+"""
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import numpy as np
