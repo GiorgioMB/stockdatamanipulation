@@ -1,5 +1,12 @@
 """
-This module contains utility classes used in the OptionPricing class
+This utility module provides foundational classes and methods for financial time series analysis and prediction within the OptionPricing class. 
+It encompasses a range of statistical models and machine learning techniques to assist in tasks such as risk-free rate approximation and volatility estimation.
+
+Components:
+- _SMA: Implements a Simple Moving Average model for short-term forecasting based on a sliding window approach.
+- _EMA: Utilizes an Exponential Moving Average for weighted forecasting that prioritizes more recent observations.
+- _SARIMAX_model: An advanced model for time series forecasting that includes seasonal adjustments and exogenous variables. This class also supports hyperparameter optimization using Optuna.
+- _AutoEncoder: A neural network based on PyTorch that learns efficient representations for time series data and can be applied to volatility estimation.
 """
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
