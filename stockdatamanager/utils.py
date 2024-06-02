@@ -44,7 +44,7 @@ class _EMA(object):
 class _SARIMAX_model(object):
     def __init__(self, target: pd.Series, exog: pd.Series = None, optimize: bool = False, 
                  optimization_rounds: int = 100, test_size: float = 0.2, random_state: int = 42, verbose: bool = False,
-                 p: int = 1, d: int = 1, q: int = 1, P: int = 1, D: int = 1, Q: int = 1, s: int = 1, trend: str = 'n',
+                 p: int = 1, d: int = 1, q: int = 1, P: int = 1, D: int = 1, Q: int = 1, s: int = 2, trend: str = 'n',
                  measure_error: bool = False, time_varying_regression: bool = False, mle_regression: bool = False,
                  simple_differencing: bool = False, enforce_stationarity: bool = False, enforce_invertibility: bool = False,
                  hamilton_representation: bool = False, concentrate_scale: bool = False, trend_offset: int = 1,
@@ -77,17 +77,30 @@ class _SARIMAX_model(object):
             - trend_offset: int, trend offset
             - use_exact_diffuse: bool, whether to use exact diffuse
         """
+        self.verbose = verbose
         self.assert_types(target, exog, optimize, optimization_rounds, test_size, random_state, p, d, q, P, D, Q, s, trend,
                             measure_error, time_varying_regression, mle_regression, simple_differencing, enforce_stationarity,
                             enforce_invertibility, hamilton_representation, concentrate_scale, trend_offset, use_exact_diffuse)
         self.target = target
-        self.verbose = verbose
         self.exog = exog
         self.model = None
         if exog is not None:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.exog, self.target, test_size = test_size, random_state = random_state)
+            if self.verbose:
+                print("Data was split successfully into train and test sets")
+                print("Samples:")
+                print("X_train:", self.X_train.head())
+                print("X_test:", self.X_test.head())
+                print("y_train:", self.y_train.head())
+                print("y_test:", self.y_test.head())
         else:
             _, _, self.y_train, self.y_test = train_test_split(np.zeros(len(self.target)), self.target, test_size = test_size, random_state = random_state)
+            if self.verbose:
+                print("Data was split successfully into train and test sets")
+                print("Samples:")
+                print("y_train:", self.y_train.head())
+                print("y_test:", self.y_test.head())
+
         if optimize:
             self.best_params = self.optimize(optimization_rounds)
             self.init_model(self.best_params['p'], self.best_params['q'], self.best_params['d'], self.best_params['D'],
@@ -103,7 +116,7 @@ class _SARIMAX_model(object):
     
     def assert_types(self, target: pd.Series, exog: pd.Series = None, optimize: bool = False, 
                  optimization_rounds: int = 100, test_size: float = 0.2, random_state: int = 42,
-                 p: int = 1, d: int = 1, q: int = 1, P: int = 1, D: int = 1, Q: int = 1, s: int = 1, trend: str = 'n',
+                 p: int = 1, d: int = 1, q: int = 1, P: int = 1, D: int = 1, Q: int = 1, s: int = 2, trend: str = 'n',
                  measure_error = False, time_varying_regression = False, mle_regression = False,
                  simple_differencing = False, enforce_stationarity = False, enforce_invertibility = False,
                  hamilton_representation = False, concentrate_scale = False, trend_offset = 1,
@@ -116,8 +129,8 @@ class _SARIMAX_model(object):
         if exog is not None:
             if not isinstance(exog, pd.Series):
                 raise ValueError("The exogenous variable must be a pandas Series")
-        if len(target) != len(exog):
-            raise ValueError("The target and exogenous variables must have the same length")
+            if len(target) != len(exog):
+                raise ValueError("The target and exogenous variables must have the same length")
         if not isinstance(optimize, bool):
             raise ValueError("The optimize parameter must be a boolean")
         if not isinstance(optimization_rounds, int):
@@ -162,7 +175,36 @@ class _SARIMAX_model(object):
             raise ValueError("The trend_offset parameter must be an integer")
         if not isinstance(use_exact_diffuse, bool):
             raise ValueError("The use_exact_diffuse parameter must be a boolean")
-        
+        if self.verbose:
+            print("All types were asserted successfully")
+            print("Parameters:")
+            print("target:", target)
+            print("exog:", exog)
+            print("optimize:", optimize)
+            print("optimization_rounds:", optimization_rounds)
+            print("test_size:", test_size)
+            print("random_state:", random_state)
+            print("p:", p)
+            print("d:", d)
+            print("q:", q)
+            print("P:", P)
+            print("D:", D)
+            print("Q:", Q)
+            print("s:", s)
+            print("trend:", trend)
+            print("measure_error:", measure_error)
+            print("time_varying_regression:", time_varying_regression)
+            print("mle_regression:", mle_regression)
+            print("simple_differencing:", simple_differencing)
+            print("enforce_stationarity:", enforce_stationarity)
+            print("enforce_invertibility:", enforce_invertibility)
+            print("hamilton_representation:", hamilton_representation)
+            print("concentrate_scale:", concentrate_scale)
+            print("trend_offset:", trend_offset)
+            print("use_exact_diffuse:", use_exact_diffuse)
+
+
+
     def init_model(self, p, q, d, D, P, Q, s, 
                    trend, measurement_error, 
                    time_varying_regression, 
@@ -174,22 +216,42 @@ class _SARIMAX_model(object):
         Method to initialize the SARIMAX model and fit it to the data
         """
         if self.verbose:
-            print("Initializing model")
-        if self.X_train is not None:
-            self.model = SARIMAX(self.y_train, self.X_train, order = (p, d, q), seasonal_order = (P, D, Q, s), trend = trend, 
+            print("Initializing model with parameters: ")
+            print("p:", p)
+            print("q:", q)
+            print("d:", d)
+            print("D:", D)
+            print("P:", P)
+            print("Q:", Q)
+            print("s:", s)
+            print("trend:", trend)
+            print("measurement_error:", measurement_error)
+            print("time_varying_regression:", time_varying_regression)
+            print("mle_regression:", mle_regression)
+            print("simple_differencing:", simple_differencing)
+            print("enforce_stationarity:", enforce_stationarity)
+            print("enforce_invertibility:", enforce_invertibility)
+            print("hamilton_representation:", hamilton_representation)
+            print("concentrate_scale:", concentrate_scale)
+            print("trend_offset:", trend_offset)
+            print("use_exact_diffuse:", use_exact_diffuse)
+        if hasattr(self, 'X_train') and self.X_train is not None:
+            self.model = SARIMAX(endog = self.y_train, exog = self.X_train, order = (p, d, q), seasonal_order = (P, D, Q, s), trend = trend, 
                                  measurement_error = measurement_error, time_varying_regression = time_varying_regression,
                                  mle_regression = mle_regression, simple_differencing = simple_differencing,
                                  enforce_stationarity = enforce_stationarity, enforce_invertibility = enforce_invertibility,
                                  hamilton_representation = hamilton_representation, concentrate_scale = concentrate_scale,
                                  trend_offset = trend_offset, use_exact_diffuse = use_exact_diffuse)
         else:
-            self.model = SARIMAX(self.y_train, order = (p, d, q), seasonal_order = (P, D, Q, s), trend = trend, 
+            self.model = SARIMAX(endog = self.y_train, order = (p, d, q), seasonal_order = (P, D, Q, s), trend = trend, 
                                  measurement_error = measurement_error, time_varying_regression = time_varying_regression,
                                  mle_regression = mle_regression, simple_differencing = simple_differencing,
                                  enforce_stationarity = enforce_stationarity, enforce_invertibility = enforce_invertibility,
                                  hamilton_representation = hamilton_representation, concentrate_scale = concentrate_scale,
                                  trend_offset = trend_offset, use_exact_diffuse = use_exact_diffuse)
-        self.model.fit()    
+        self.model = self.model.fit()
+        if self.verbose:
+            print("The model was fitted successfully")
     
     def optimize(self, rounds):
         print("Warning: This feature is experimental, it may take a long time to run, as some models may be invalid or take a long time to fit")
@@ -219,7 +281,7 @@ class _SARIMAX_model(object):
                 self.init_model(p, q, d, D, P, Q, s, trend, measure_error, time_varying_regression, mle_regression,
                                 simple_differencing, enforce_stationarity, enforce_invertibility, hamiltion_representation,
                                 concentrate_scale, trend_offset, use_exact_diffuse)
-                if self.X_test is not None:
+                if hasattr(self, 'X_test') and self.X_test is not None:
                     prediction = self.model.forecast(steps = len(self.X_test), exog = self.X_test)
                 else:
                     prediction = self.model.forecast(steps = len(self.y_test))
