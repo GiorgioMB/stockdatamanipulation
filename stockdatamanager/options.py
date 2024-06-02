@@ -1210,6 +1210,16 @@ class OptionPricing(object):
           autoencoder_params = self.optimize_autoencoder_model(optimization_rounds)
           self.build_autoencoder_model(**autoencoder_params)
         else:
+          if verbose:
+            print("The Autoencoder method accepts the following optional parameters:\n - input_size: int, the size of the input layer")
+            print("- hidden_size: int, the size of the hidden layer")
+            print("- num_layers: int, the number of layers")
+            print("- epochs: int, the number of epochs")
+            print("- batch_size: int, the batch size")
+            print("- learning_rate: float, the learning rate")
+            print("- dropout: float, the dropout rate")
+            print("- test_size: float, the size of the test set")
+            print("- device: torch.device, the device to use")
           if len(autoencoder_parameters) == 0:
             autoencoder_parameters = {'input_size': 10, 
                                       'hidden_size': 5,
@@ -1316,32 +1326,6 @@ class OptionPricing(object):
     date = pd.to_datetime(date_str)
     return date 
   
-  def __repr__(self):
-    s = ''
-    s += "Available Methods:\n"
-    s += "- Black-Scholes\n"
-    s += "- Monte Carlo\n"
-    s += "- Binomial Tree\n"
-    s += "- Binomial Lattice Tree\n"
-    s += "- Cox-Ross-Rubinstein\n"
-    s += "- Leisen-Reimer Tree\n"
-    s += "- Trinomial Tree\n"
-    s += "- Trinomial Lattice Tree\n"
-    s += "- Explicit Finite Difference\n"
-    s += "- Implicit Finite Difference\n"
-    s += "- Crank-Nicolson Finite Difference\n"
-    if self.verbose:
-      s += f"Option Pricing for {self.yf_ticker.info['longName']}\n"
-      s += f"Option Type: {'Call' if self.is_call else 'Put'}\n"
-      s += f"American Option: {self.american}\n"
-      s += f"Risk-Free Rate: {self.risk_free_rate}\n"
-      s += f"Volatility: {self.sigma}\n"
-      s += f"Strike Price: {self.K}\n"
-      s += f"Expiration Date: {self.date}\n"
-      s += f"Underlying Asset Price: {self.S}\n"
-      s += f"Dividend Yield: {self.dividend_yield}\n"
-    print(s)
-
   def calculate_option_price(self, method: str, describe: bool = False, **kwargs) -> float:
     """
     Main wrapper function to calculate the price of an option using the specified method.
