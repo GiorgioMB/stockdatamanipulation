@@ -18,7 +18,7 @@ class _SMA(object):
         if self.target.isna().sum() > 0:
             raise ValueError("The target contains missing values, please fill them before using this class")
     
-    def predict_val(self, num_steps = 1):
+    def predict_val(self, num_steps = 1) -> float:
         rolling_mean = self.target.rolling(window=self.window).mean()
         final_result = rolling_mean.tail(num_steps)
         return np.mean(final_result)
@@ -37,7 +37,7 @@ class _EMA(object):
         if self.target.isna().sum() > 0:
             raise ValueError("The target contains missing values, please fill them before using this class")
     
-    def predict_val(self, num_steps = 1):
+    def predict_val(self, num_steps = 1) -> float:
         values = self.target.ewm(span = self.window).mean().tail(num_steps)
         return np.mean(values)
 
@@ -253,7 +253,10 @@ class _SARIMAX_model(object):
         if self.verbose:
             print("The model was fitted successfully")
     
-    def optimize(self, rounds):
+    def optimize(self, rounds) -> dict:
+        """
+        Method to optimize the hyperparameters of the model using Optuna
+        """
         print("Warning: This feature is experimental, it may take a long time to run, as some models may be invalid or take a long time to fit")
         def objective(trial):
             p = trial.suggest_int('p', 0, 5)
@@ -295,7 +298,7 @@ class _SARIMAX_model(object):
         study.optimize(objective, n_trials = rounds)
         return study.best_params
     
-    def forecast(self, steps: int = 1):
+    def forecast(self, steps: int = 1) -> np.ndarray:
         """
         Method to forecast values
         Inputs:
