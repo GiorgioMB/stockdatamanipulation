@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='stockdatamanager',
-    version='1.0.1',
+    version='1.1',
     packages=find_packages(),
     description='A comprehensive library for financial analysis',
     long_description=open('README.md').read(),
@@ -24,7 +24,8 @@ setup(
         'scikit-learn>=1.4.1.post1',
         'statsmodels>=0.14.1',
         'arch>=4.19',
-        'optuna>=2.10.0'
+        'optuna>=2.10.0',
+        'torch>=2.2.1'
     ],
     python_requires='>=3.6',
 )
