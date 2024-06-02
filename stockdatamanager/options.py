@@ -38,6 +38,16 @@ class Greeks(object):
   - identification: Union[str, int], the contract symbol of the option or the index of the option in the option chain
                                      Note: to find the contract identifier, it is written as ticker-YY-MM-DD-C(or P)-strike price (omit the - and the strike price is in a thousands format, so 1000 is $1.00)
   - verbose: int, the verbosity of the output
+
+  Methods:
+  - calculate_delta: calculates the delta of the option
+  - calculate_gamma: calculates the gamma of the option
+  - calculate_vega: calculates the vega of the option
+  - (and nearly all the greeks, as explained in https://en.wikipedia.org/wiki/en:Greeks_(finance)?variant=zh-tw)
+
+  Example usage:
+    greek_calculator = Greeks('MSFT', True, 0, False)
+    delta = greek_calculator.calculate_delta(risk_free_horizon = '13 weeks')
   """
   def __init__(self, 
                ticker: str,
@@ -1105,6 +1115,13 @@ class OptionPricing(object):
     - num_of_days_risk_free_rate: int, the number of days to consider for the risk-free rate approximation
     - num_of_days_volatility: int, the number of days to consider for the volatility approximation
     - random_state: int, the random state for reproducibility
+
+    Method:
+    - calculate_option_price: method to calculate the option price using many possible algorithms, including (but not limited to) Finite Differences, Tree Models and Monte Carlo simulations
+
+    Example usage:
+      pricer = OptionPricing('AAPL', True, True, 0)
+      price = pricer.calculate_option_price('monte_carlo', describe = True, display = True)
     """
     self._assertions(ticker, call, american, risk_free_rate, identification, risk_free_rate_approximation, volatility, use_yfinance_volatility, optimize_garch, optimization_rounds, verbose, risk_free_rate_approximation_parameters, num_of_days_risk_free_rate, num_of_days_volatility, use_garch, use_autoencoder, optimize_autoencoder, autoencoder_parameters, random_state)
     self.fetcher = Fetcher(ticker)
